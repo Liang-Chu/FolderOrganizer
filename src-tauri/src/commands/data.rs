@@ -1,6 +1,7 @@
 use tauri::State;
 
-use crate::db::{ActivityLogEntry, FileIndexEntry, UndoEntry};
+use crate::db::{ActivityLogEntry, FileIndexEntry, ScheduledDeletion, UndoEntry};
+use crate::scheduler;
 use super::AppState;
 
 #[tauri::command]
@@ -54,4 +55,33 @@ pub fn undo_action(state: State<AppState>, undo_id: String) -> Result<(), String
         .mark_restored(&undo_id)
         .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ── Scheduled Deletions ─────────────────────────────────────
+
+/// Get all files currently scheduled for deletion.
+#[tauri::command]
+pub fn get_scheduled_deletions(state: State<AppState>) -> Result<Vec<ScheduledDeletion>, String> {
+    state
+        .db
+        .get_scheduled_deletions()
+        .map_err(|e| e.to_string())
+}
+
+/// Cancel a scheduled deletion by ID.
+#[tauri::command]
+pub fn cancel_scheduled_deletion(
+    state: State<AppState>,
+    deletion_id: String,
+) -> Result<(), String> {
+    state
+        .db
+        .cancel_scheduled_deletion(&deletion_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Manually run all due deletions now. Returns count of files deleted.
+#[tauri::command]
+pub fn run_deletions(state: State<AppState>) -> Result<u32, String> {
+    Ok(scheduler::process_due_deletions(&state.db))
 }

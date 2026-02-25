@@ -41,6 +41,9 @@ pub struct AppSettings {
     /// Default root directory for sorted files (Move destinations are relative to this)
     #[serde(default = "default_sort_root")]
     pub default_sort_root: PathBuf,
+    /// Hour of the day (0-23) when scheduled deletions run automatically (default: 3 = 3 AM)
+    #[serde(default = "default_deletion_time_hour")]
+    pub deletion_time_hour: u32,
 }
 
 fn default_sort_root() -> PathBuf {
@@ -49,6 +52,10 @@ fn default_sort_root() -> PathBuf {
 
 fn default_max_storage_mb() -> u32 {
     2048
+}
+
+fn default_deletion_time_hour() -> u32 {
+    3
 }
 
 impl Default for AppSettings {
@@ -61,6 +68,7 @@ impl Default for AppSettings {
             log_retention_days: 30,
             max_storage_mb: default_max_storage_mb(),
             default_sort_root: default_sort_root(),
+            deletion_time_hour: default_deletion_time_hour(),
         }
     }
 }

@@ -7,6 +7,7 @@ import type {
   ActivityLogEntry,
   FileIndexEntry,
   UndoEntry,
+  ScheduledDeletion,
   RuleMetadata,
   DbStats,
   TableQueryResult,
@@ -65,6 +66,13 @@ export const deleteRule = (folderId: string, ruleId: string) =>
 export const reorderRules = (folderId: string, ruleIds: string[]) =>
   invoke<void>("reorder_rules", { folderId, ruleIds });
 
+/** Copy rules from other folders into a target folder. Returns count of rules copied. */
+export const copyRulesToFolder = (
+  targetFolderId: string,
+  sources: { folder_id: string; rule_id: string }[]
+) =>
+  invoke<number>("copy_rules_to_folder", { targetFolderId, sources });
+
 // ── Activity & Data ─────────────────────────────────────────
 
 export const getActivityLog = (
@@ -81,6 +89,20 @@ export const getUndoEntries = () => invoke<UndoEntry[]>("get_undo_entries");
 
 export const undoAction = (undoId: string) =>
   invoke<void>("undo_action", { undoId });
+
+// ── Scheduled Deletions ─────────────────────────────────────
+
+/** Get all files currently scheduled for deletion. */
+export const getScheduledDeletions = () =>
+  invoke<ScheduledDeletion[]>("get_scheduled_deletions");
+
+/** Cancel a single scheduled deletion by ID. */
+export const cancelScheduledDeletion = (deletionId: string) =>
+  invoke<void>("cancel_scheduled_deletion", { deletionId });
+
+/** Manually run all due deletions now. Returns count of files deleted. */
+export const runDeletions = () =>
+  invoke<number>("run_deletions");
 
 // ── Watcher Control ─────────────────────────────────────────
 

@@ -1,1 +1,5 @@
 @import "tailwindcss";
+
+html, body, #root {
+  min-width: 1080px;
+}

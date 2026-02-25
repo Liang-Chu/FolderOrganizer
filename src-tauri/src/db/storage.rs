@@ -31,7 +31,7 @@ impl Database {
     /// Get row counts for all tables.
     pub fn get_table_stats(&self) -> Result<Vec<TableStats>> {
         let conn = self.conn.lock().unwrap();
-        let tables = ["activity_log", "file_index", "undo_history", "rule_metadata"];
+        let tables = ["activity_log", "file_index", "undo_history", "rule_metadata", "scheduled_deletions"];
         let mut stats = Vec::new();
         for table in &tables {
             let count: i64 = conn.query_row(
@@ -56,7 +56,7 @@ impl Database {
         search: Option<&str>,
     ) -> Result<TableQueryResult> {
         // Whitelist tables to prevent SQL injection
-        let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata"];
+        let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata", "scheduled_deletions"];
         if !allowed_tables.contains(&table) {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Table '{}' not allowed",
@@ -140,7 +140,7 @@ impl Database {
 
     /// Clear all rows from a specific table.
     pub fn clear_table(&self, table: &str) -> Result<u64> {
-        let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata"];
+        let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata", "scheduled_deletions"];
         if !allowed_tables.contains(&table) {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Table '{}' not allowed",

@@ -24,7 +24,18 @@
     "stopped": "Arrêté",
     "recentActivity": "Activité récente",
     "noActivity": "Aucune activité pour le moment. Ajoutez des dossiers et des règles pour commencer.",
-    "manual": "manuel"
+    "manual": "manuel",
+    "scheduledDeletions": "Suppressions programmées",
+    "scheduledDeletionsCount": "{{count}} fichier(s) en attente",
+    "noScheduledDeletions": "Aucun fichier programmé pour suppression.",
+    "runDeletionsNow": "Exécuter les suppressions",
+    "runDeletionsHint": "Supprimer immédiatement tous les fichiers dont la date de suppression prévue est passée (aujourd'hui ou avant)",
+    "deletionsRan": "{{count}} fichier(s) supprimé(s).",
+    "cancelDeletion": "Annuler",
+    "scheduledFor": "Programmé pour",
+    "triggeredBy": "Règle :",
+    "viewAll": "Voir tout",
+    "showLess": "Réduire"
   },
   "folders": {
     "title": "Dossiers surveillés",
@@ -97,7 +108,15 @@
     "whitelistDesc": "Les fichiers correspondant à ces motifs seront ignorés par cette règle. Les destinations de déplacement sont automatiquement en liste blanche.",
     "whitelistPlaceholder": "ex. *.garder, important_*",
     "whitelistAdd": "Ajouter",
-    "autoWhitelist": "Liste blanche automatique (destination de déplacement)"
+    "autoWhitelist": "Liste blanche automatique (destination de déplacement)",
+    "importRules": "Importer des règles existantes",
+    "importRulesTitle": "Importer des règles d'autres dossiers",
+    "importRulesDesc": "Sélectionnez des règles d'autres dossiers à copier dans le dossier actuel.",
+    "importRulesNone": "Aucune règle trouvée dans les autres dossiers.",
+    "importRulesSelected": "{{count}} sélectionné(s)",
+    "importRulesCopy": "Copier la sélection",
+    "importRulesSuccess": "{{count}} règle(s) copiée(s) avec succès !",
+    "importRulesFrom": "De :"
   },
   "activity": {
     "title": "Journal d'activité",
@@ -158,6 +177,8 @@
     "logRetentionDesc": "Nombre de jours de conservation des journaux (les anciens sont supprimés)",
     "maxStorage": "Taille maximale de stockage",
     "maxStorageDesc": "Taille maximale de la base en Mo (0 = illimité, défaut 2048 = 2 Go)",
+    "deletionTime": "Heure de suppression",
+    "deletionTimeDesc": "Heure du jour (0-23) à laquelle les suppressions programmées s'exécutent automatiquement",
     "dataStorage": "Stockage des données",
     "openDataExplorer": "Ouvrir l'explorateur de données",
     "database": "Base de données",

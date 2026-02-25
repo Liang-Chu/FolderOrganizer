@@ -121,53 +121,81 @@ pub fn evaluate_file(
         }
 
         // Condition matched — execute the action
-        return Some(execute_action(file_path, &file_name, rule, folder, db));
+        match &rule.action {
+            Action::Move { .. } => {
+                return Some(execute_action(file_path, &file_name, rule, folder, db));
+            }
+            Action::Delete { after_days } => {
+                // Schedule for deletion — insert into scheduled_deletions table.
+                // If already scheduled, this is a silent no-op (no duplicate log).
+                schedule_deletion(file_path, &file_name, rule, folder, db, *after_days);
+                return None; // Don't log anything — logging happens when deletion executes
+            }
+        }
     }
 
     None
+}
+
+/// Schedule a file for deletion by inserting into the scheduled_deletions table.
+/// Uses upsert so re-scans don't create duplicates.
+fn schedule_deletion(
+    file_path: &Path,
+    file_name: &str,
+    rule: &Rule,
+    folder: &WatchedFolder,
+    db: &Database,
+    after_days: u32,
+) {
+    let now = Utc::now();
+    let delete_after = now + chrono::Duration::days(after_days as i64);
+    let extension = file_path
+        .extension()
+        .map(|e| e.to_string_lossy().to_string());
+    let size = fs::metadata(file_path).ok().map(|m| m.len() as i64);
+
+    let inserted = db.upsert_scheduled_deletion(
+        &Uuid::new_v4().to_string(),
+        &file_path.to_string_lossy(),
+        &folder.id,
+        &rule.name,
+        file_name,
+        extension.as_deref(),
+        size,
+        &now.format("%Y-%m-%d %H:%M:%S").to_string(),
+        &delete_after.format("%Y-%m-%d %H:%M:%S").to_string(),
+    );
+
+    match inserted {
+        Ok(true) => {
+            log::info!(
+                "Scheduled deletion: {} (after {} days, rule: {})",
+                file_name, after_days, rule.name
+            );
+        }
+        Ok(false) => {
+            // Already scheduled — silent no-op
+        }
+        Err(e) => {
+            log::error!("Failed to schedule deletion for {}: {}", file_name, e);
+        }
+    }
 }
 
 fn execute_action(
     file_path: &Path,
     file_name: &str,
     rule: &Rule,
-    folder: &WatchedFolder,
-    db: &Database,
+    _folder: &WatchedFolder,
+    _db: &Database,
 ) -> RuleActionResult {
     match &rule.action {
         Action::Move { destination } => {
             execute_move(file_path, destination, file_name, &rule.name)
         }
-
-        Action::Delete { after_days } => {
-            let now = Utc::now();
-            let scheduled = now + chrono::Duration::days(*after_days as i64);
-            let extension = file_path
-                .extension()
-                .map(|e| e.to_string_lossy().to_string());
-            let size = fs::metadata(file_path).ok().map(|m| m.len() as i64);
-
-            let _ = db.upsert_file(
-                &Uuid::new_v4().to_string(),
-                &file_path.to_string_lossy(),
-                &folder.id,
-                file_name,
-                extension.as_deref(),
-                size,
-                &now.format("%Y-%m-%d %H:%M:%S").to_string(),
-                None,
-                Some("auto_delete"),
-                Some(&scheduled.format("%Y-%m-%d %H:%M:%S").to_string()),
-            );
-
-            RuleActionResult {
-                file_path: file_path.to_string_lossy().to_string(),
-                file_name: file_name.to_string(),
-                action: "scheduled_delete".to_string(),
-                rule_name: rule.name.clone(),
-                success: true,
-                details: Some(format!("Scheduled for deletion in {} days", after_days)),
-            }
+        Action::Delete { .. } => {
+            // This branch should not be reached — Delete is handled by schedule_deletion
+            unreachable!("Delete actions are handled by schedule_deletion, not execute_action")
         }
     }
 }

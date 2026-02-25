@@ -45,6 +45,21 @@ pub struct RuleMetadata {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct ScheduledDeletion {
+    pub id: String,
+    pub file_path: String,
+    pub folder_id: String,
+    pub rule_name: String,
+    pub file_name: String,
+    pub extension: Option<String>,
+    pub size_bytes: Option<i64>,
+    /// When the file was first scheduled
+    pub scheduled_at: String,
+    /// When the file should actually be deleted (scheduled_at + after_days)
+    pub delete_after: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct TableStats {
     pub table_name: String,
     pub row_count: u64,

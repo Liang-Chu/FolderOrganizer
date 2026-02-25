@@ -7,7 +7,9 @@ use uuid::Uuid;
 use crate::config::AppConfig;
 use crate::db::Database;
 
-/// Run a periodic scan: check for files scheduled for auto-delete.
+/// Run the periodic maintenance tasks (log pruning, undo cleanup, storage enforcement).
+/// This runs on the scan_interval_minutes schedule. It does NOT run deletions —
+/// deletions are handled by `process_due_deletions` on a daily schedule.
 pub fn run_scheduled_cleanup(
     config: &AppConfig,
     db: &Database,
@@ -15,46 +17,16 @@ pub fn run_scheduled_cleanup(
     let now = Utc::now();
     let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
 
-    // 1. Process pending auto-delete files whose scheduled_at has passed
-    if let Ok(pending) = db.get_pending_files() {
-        for entry in pending {
-            if entry.pending_action.as_deref() == Some("auto_delete") {
-                if let Some(ref scheduled) = entry.scheduled_at {
-                    if scheduled.as_str() <= now_str.as_str() {
-                        let path = Path::new(&entry.file_path);
-                        if path.exists() {
-                            // Move to a trash staging area instead of hard-deleting
-                            let result = safe_delete(path, db, &now_str);
-                            let _ = db.insert_activity(
-                                &Uuid::new_v4().to_string(),
-                                &entry.file_path,
-                                &entry.file_name,
-                                "auto_delete",
-                                None,
-                                Some(&entry.folder_id),
-                                &now_str,
-                                if result { "success" } else { "error" },
-                                None,
-                            );
-                        }
-                        // Remove from file index regardless (file gone or acted upon)
-                        let _ = db.remove_file_by_path(&entry.file_path);
-                    }
-                }
-            }
-        }
-    }
-
-    // 2. Prune expired undo entries
+    // 1. Prune expired undo entries
     let _ = db.prune_expired_undo(&now_str);
 
-    // 3. Prune old logs based on retention setting
+    // 2. Prune old logs based on retention setting
     let retention_days = config.settings.log_retention_days;
     let cutoff = now - chrono::Duration::days(retention_days as i64);
     let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
     let _ = db.prune_old_logs(&cutoff_str);
 
-    // 4. Enforce storage size limit
+    // 3. Enforce storage size limit
     let max_mb = config.settings.max_storage_mb;
     if max_mb > 0 {
         let max_bytes = (max_mb as u64) * 1024 * 1024;
@@ -66,11 +38,71 @@ pub fn run_scheduled_cleanup(
         }
     }
 
+    // 4. Clean up scheduled_deletions for files that no longer exist
+    if let Ok(all_scheduled) = db.get_scheduled_deletions() {
+        for entry in all_scheduled {
+            if !Path::new(&entry.file_path).exists() {
+                let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+            }
+        }
+    }
+
     log::info!("Scheduled cleanup completed at {}", now_str);
 }
 
-/// Scan all enabled folders for existing files and index them.
+/// Process all due scheduled deletions (where delete_after <= now).
+/// Called either by the daily timer or manually by the user via `run_deletions`.
+/// Returns the number of files successfully deleted.
+pub fn process_due_deletions(db: &Database) -> u32 {
+    let now = Utc::now();
+    let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut count = 0u32;
+
+    match db.get_due_deletions(&now_str) {
+        Ok(due) => {
+            for entry in due {
+                let path = Path::new(&entry.file_path);
+                if path.exists() {
+                    let success = safe_delete(path, db, &now_str);
+                    // Log the actual deletion to activity_log
+                    let _ = db.insert_activity(
+                        &Uuid::new_v4().to_string(),
+                        &entry.file_path,
+                        &entry.file_name,
+                        "auto_delete",
+                        Some(&entry.rule_name),
+                        Some(&entry.folder_id),
+                        &now_str,
+                        if success { "success" } else { "error" },
+                        if success {
+                            Some("File moved to trash staging (recoverable for 7 days)")
+                        } else {
+                            Some("Failed to delete file")
+                        },
+                    );
+                    if success {
+                        count += 1;
+                    }
+                }
+                // Remove from scheduled_deletions regardless (file gone or acted upon)
+                let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to query due deletions: {}", e);
+        }
+    }
+
+    if count > 0 {
+        log::info!("Processed {} due deletions", count);
+    }
+    count
+}
+
+/// Scan all enabled folders for existing files and evaluate rules.
 /// This handles files that were added while the app was not running.
+/// Delete rules silently schedule files (no activity log spam).
+/// Move rules execute immediately and log to activity.
 pub fn scan_existing_files(
     config: &AppConfig,
     db: &Database,
@@ -89,17 +121,8 @@ pub fn scan_existing_files(
                     continue;
                 }
 
-                let _file_name = path
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_string_lossy()
-                    .to_string();
-                let _extension = path
-                    .extension()
-                    .map(|e| e.to_string_lossy().to_string());
-                let _size = fs::metadata(&path).ok().map(|m| m.len() as i64);
-
-                // Evaluate against rules
+                // evaluate_file now returns None for Delete rules (they silently schedule).
+                // It only returns Some for Move rules that actually execute.
                 if let Some(result) = crate::rules::evaluate_file(&path, folder, db) {
                     let _ = db.insert_activity(
                         &Uuid::new_v4().to_string(),
@@ -117,7 +140,7 @@ pub fn scan_existing_files(
         }
     }
 
-    log::info!("Initial folder scan completed");
+    log::info!("Folder scan completed");
 }
 
 /// Safe delete: move file to a staging dir so it can be undone.

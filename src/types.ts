@@ -15,6 +15,8 @@ export interface AppSettings {
   max_storage_mb: number;
   /** Default root directory for sorted files (Move destinations resolve relative to this) */
   default_sort_root: string;
+  /** Hour of day (0-23) when scheduled deletions auto-run (default: 3 = 3 AM) */
+  deletion_time_hour: number;
 }
 
 export interface WatchedFolder {
@@ -109,6 +111,20 @@ export interface RuleMetadata {
   folder_id: string;
   created_at: string;
   last_triggered_at: string | null;
+}
+
+export interface ScheduledDeletion {
+  id: string;
+  file_path: string;
+  folder_id: string;
+  rule_name: string;
+  file_name: string;
+  extension: string | null;
+  size_bytes: number | null;
+  /** When the file was first scheduled */
+  scheduled_at: string;
+  /** When the file should actually be deleted */
+  delete_after: string;
 }
 
 export interface TableStats {

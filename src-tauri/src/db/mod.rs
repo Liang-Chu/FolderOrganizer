@@ -70,6 +70,21 @@ impl Database {
                 last_triggered_at TEXT,
                 PRIMARY KEY (rule_id, folder_id)
             );
+
+            CREATE TABLE IF NOT EXISTS scheduled_deletions (
+                id              TEXT PRIMARY KEY,
+                file_path       TEXT NOT NULL UNIQUE,
+                folder_id       TEXT NOT NULL,
+                rule_name       TEXT NOT NULL,
+                file_name       TEXT NOT NULL,
+                extension       TEXT,
+                size_bytes      INTEGER,
+                scheduled_at    TEXT NOT NULL,
+                delete_after    TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_sched_del_after ON scheduled_deletions(delete_after);
+            CREATE INDEX IF NOT EXISTS idx_sched_del_folder ON scheduled_deletions(folder_id);
             ",
         )?;
         Ok(())
@@ -82,11 +97,13 @@ mod activity;
 mod file_index;
 mod metadata;
 mod models;
+mod scheduled_deletions;
 mod storage;
 mod undo;
 
 // ── Re-exports ──────────────────────────────────────────────
 
 pub use models::{
-    ActivityLogEntry, DbStats, FileIndexEntry, RuleMetadata, TableQueryResult, UndoEntry,
+    ActivityLogEntry, DbStats, FileIndexEntry, RuleMetadata, ScheduledDeletion, TableQueryResult,
+    UndoEntry,
 };

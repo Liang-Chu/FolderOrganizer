@@ -24,7 +24,18 @@
     "stopped": "已停止",
     "recentActivity": "最近活动",
     "noActivity": "暂无活动记录。请先添加文件夹和规则。",
-    "manual": "手动"
+    "manual": "手动",
+    "scheduledDeletions": "计划删除",
+    "scheduledDeletionsCount": "{{count}} 个文件待处理",
+    "noScheduledDeletions": "没有计划删除的文件。",
+    "runDeletionsNow": "立即执行删除",
+    "runDeletionsHint": "立即删除所有计划删除日期已过（今天或更早）的文件",
+    "deletionsRan": "已删除 {{count}} 个文件。",
+    "cancelDeletion": "取消",
+    "scheduledFor": "计划于",
+    "triggeredBy": "规则：",
+    "viewAll": "查看全部",
+    "showLess": "收起"
   },
   "folders": {
     "title": "监控文件夹",
@@ -97,7 +108,15 @@
     "whitelistDesc": "匹配这些模式的文件将被此规则跳过。移动目标会自动加入白名单。",
     "whitelistPlaceholder": "例如 *.keep, important_*",
     "whitelistAdd": "添加",
-    "autoWhitelist": "自动白名单（移动目标）"
+    "autoWhitelist": "自动白名单（移动目标）",
+    "importRules": "导入现有规则",
+    "importRulesTitle": "从其他文件夹导入规则",
+    "importRulesDesc": "从其他文件夹选择规则复制到当前文件夹。",
+    "importRulesNone": "其他文件夹中没有找到规则。",
+    "importRulesSelected": "已选择 {{count}} 个",
+    "importRulesCopy": "复制选中项",
+    "importRulesSuccess": "成功复制 {{count}} 条规则！",
+    "importRulesFrom": "来自："
   },
   "activity": {
     "title": "活动记录",
@@ -158,6 +177,8 @@
     "logRetentionDesc": "活动日志保留天数（超期自动删除）",
     "maxStorage": "最大存储空间",
     "maxStorageDesc": "数据库最大容量（MB），0 = 不限，默认 2048 = 2 GB",
+    "deletionTime": "删除时间",
+    "deletionTimeDesc": "每天自动执行计划删除的时间（0-23 小时）",
     "dataStorage": "数据存储",
     "openDataExplorer": "打开数据浏览器",
     "database": "数据库",

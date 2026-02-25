@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, ChevronDown } from "lucide-react";
+import { Plus, ChevronDown, Copy } from "lucide-react";
 import * as api from "../../api";
 import type { WatchedFolder, Rule } from "../../types";
 import { createEmptyRule } from "./helpers";
 import { RuleEditor } from "./RuleEditor";
 import { RuleListItem } from "./RuleListItem";
+import { ImportRulesModal } from "./ImportRulesModal";
 
 export default function Rules() {
   const { t } = useTranslation();
@@ -15,6 +16,7 @@ export default function Rules() {
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
   const [isNewRule, setIsNewRule] = useState(false);
   const [defaultSortRoot, setDefaultSortRoot] = useState("D:\\sorted");
+  const [showImportModal, setShowImportModal] = useState(false);
 
   useEffect(() => {
     api.getWatchedFolders().then((f) => {
@@ -69,18 +71,46 @@ export default function Rules() {
     setRules(await api.getRules(selectedFolderId));
   };
 
+  const handleImportRules = async (
+    sources: { folder_id: string; rule_id: string }[]
+  ) => {
+    if (!selectedFolderId) return;
+    await api.copyRulesToFolder(selectedFolderId, sources);
+    // Refresh both rules list and folders (since folders contain rules)
+    setRules(await api.getRules(selectedFolderId));
+    const updatedFolders = await api.getWatchedFolders();
+    setFolders(updatedFolders);
+  };
+
+  // Check if other folders have rules to import
+  const otherFoldersHaveRules = folders.some(
+    (f) => f.id !== selectedFolderId && f.rules.length > 0
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">{t("rules.title")}</h2>
-        <button
-          onClick={handleAddRule}
-          disabled={!selectedFolderId}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Plus size={16} />
-          {t("rules.addRule")}
-        </button>
+        <div className="flex items-center gap-2">
+          {otherFoldersHaveRules && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              disabled={!selectedFolderId}
+              className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Copy size={16} />
+              {t("rules.importRules")}
+            </button>
+          )}
+          <button
+            onClick={handleAddRule}
+            disabled={!selectedFolderId}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Plus size={16} />
+            {t("rules.addRule")}
+          </button>
+        </div>
       </div>
 
       {/* Folder selector */}
@@ -146,6 +176,16 @@ export default function Rules() {
             />
           ))}
         </div>
+      )}
+
+      {/* Import Rules Modal */}
+      {showImportModal && selectedFolderId && (
+        <ImportRulesModal
+          folders={folders}
+          targetFolderId={selectedFolderId}
+          onImport={handleImportRules}
+          onClose={() => setShowImportModal(false)}
+        />
       )}
     </div>
   );

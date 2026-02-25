@@ -13,10 +13,12 @@
     "windows": [
       {
         "title": "Download Organizer",
-        "width": 1000,
+        "width": 1080,
         "height": 700,
-        "minWidth": 800,
-        "minHeight": 600
+        "minWidth": 600,
+        "minHeight": 600,
+        "maximizable": true,
+        "maximized": true
       }
     ],
     "security": {

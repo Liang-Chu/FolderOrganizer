@@ -8,6 +8,7 @@ mod watcher;
 
 use std::sync::{Arc, Mutex};
 
+use chrono::Timelike;
 use commands::AppState;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -36,20 +37,36 @@ pub fn run() {
         watcher: Arc::new(Mutex::new(file_watcher)),
     };
 
-    // Start periodic scheduler in background
+    // Start periodic scheduler in background (maintenance + daily deletion check)
     let scheduler_config = config_arc.clone();
     let scheduler_db = db_arc.clone();
     std::thread::spawn(move || {
+        let mut last_deletion_day: Option<u32> = None;
         loop {
-            let interval = {
+            let (interval, deletion_hour) = {
                 let cfg = scheduler_config.lock().unwrap();
-                cfg.settings.scan_interval_minutes
+                (cfg.settings.scan_interval_minutes, cfg.settings.deletion_time_hour)
             };
             std::thread::sleep(std::time::Duration::from_secs(
                 (interval as u64) * 60,
             ));
-            let cfg = scheduler_config.lock().unwrap();
-            scheduler::run_scheduled_cleanup(&cfg, &scheduler_db);
+
+            // Run maintenance (log pruning, undo cleanup, storage enforcement)
+            {
+                let cfg = scheduler_config.lock().unwrap();
+                scheduler::run_scheduled_cleanup(&cfg, &scheduler_db);
+            }
+
+            // Check if it's time to run daily deletions
+            let now = chrono::Local::now();
+            let today = now.format("%j").to_string().parse::<u32>().unwrap_or(0); // day of year
+            let current_hour = now.hour();
+
+            if current_hour >= deletion_hour && last_deletion_day != Some(today) {
+                log::info!("Running daily scheduled deletions (hour: {}, configured: {})", current_hour, deletion_hour);
+                scheduler::process_due_deletions(&scheduler_db);
+                last_deletion_day = Some(today);
+            }
         }
     });
 
@@ -75,10 +92,14 @@ pub fn run() {
             commands::delete_rule,
             commands::get_rule_metadata,
             commands::reorder_rules,
+            commands::copy_rules_to_folder,
             commands::get_activity_log,
             commands::get_pending_actions,
             commands::get_undo_entries,
             commands::undo_action,
+            commands::get_scheduled_deletions,
+            commands::cancel_scheduled_deletion,
+            commands::run_deletions,
             commands::scan_now,
             commands::ensure_dir,
             commands::open_in_explorer,

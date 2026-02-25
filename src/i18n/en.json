@@ -24,7 +24,18 @@
     "stopped": "Stopped",
     "recentActivity": "Recent Activity",
     "noActivity": "No activity yet. Add folders and rules to get started.",
-    "manual": "manual"
+    "manual": "manual",
+    "scheduledDeletions": "Scheduled Deletions",
+    "scheduledDeletionsCount": "{{count}} file(s) pending",
+    "noScheduledDeletions": "No files scheduled for deletion.",
+    "runDeletionsNow": "Run Deletions Now",
+    "runDeletionsHint": "Immediately delete all files whose scheduled deletion date has passed (today or earlier)",
+    "deletionsRan": "{{count}} file(s) deleted.",
+    "cancelDeletion": "Cancel",
+    "scheduledFor": "Scheduled",
+    "triggeredBy": "Rule:",
+    "viewAll": "View All",
+    "showLess": "Show Less"
   },
   "folders": {
     "title": "Watched Folders",
@@ -97,7 +108,15 @@
     "whitelistDesc": "Files matching these patterns will be skipped by this rule. Move destinations are auto-whitelisted.",
     "whitelistPlaceholder": "e.g. *.keep, important_*",
     "whitelistAdd": "Add",
-    "autoWhitelist": "Auto-whitelisted (Move destination)"
+    "autoWhitelist": "Auto-whitelisted (Move destination)",
+    "importRules": "Import Existing Rules",
+    "importRulesTitle": "Import Rules from Other Folders",
+    "importRulesDesc": "Select rules from other folders to copy into the current folder.",
+    "importRulesNone": "No rules found in other folders.",
+    "importRulesSelected": "{{count}} selected",
+    "importRulesCopy": "Copy Selected",
+    "importRulesSuccess": "{{count}} rule(s) copied successfully!",
+    "importRulesFrom": "From:"
   },
   "activity": {
     "title": "Activity Log",
@@ -158,6 +177,8 @@
     "logRetentionDesc": "Days to keep activity log entries (older entries are auto-deleted)",
     "maxStorage": "Max Storage Size",
     "maxStorageDesc": "Maximum database size in MB (0 = unlimited, default 2048 = 2 GB)",
+    "deletionTime": "Deletion Time",
+    "deletionTimeDesc": "Hour of day (0-23) when scheduled file deletions automatically run",
     "dataStorage": "Data Storage",
     "openDataExplorer": "Open Data Explorer",
     "database": "Database",
