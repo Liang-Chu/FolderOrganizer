@@ -1,9 +1,10 @@
 import { v4 as uuidv4 } from "uuid";
 import type { Rule, Action } from "../../types";
+import type { TFunction } from "i18next";
 
 // ── Types ───────────────────────────────────────────────────
 
-export type ActionType = "Move" | "Delete" | "Ignore";
+export type ActionType = "Move" | "Delete";
 
 // ── Helper Functions ────────────────────────────────────────
 
@@ -13,8 +14,6 @@ export function defaultAction(type: ActionType): Action {
       return { type: "Move", destination: "" };
     case "Delete":
       return { type: "Delete", after_days: 30 };
-    case "Ignore":
-      return { type: "Ignore" };
   }
 }
 
@@ -27,21 +26,20 @@ export function createEmptyRule(): Rule {
     condition: { type: "Always" },
     condition_text: "*",
     action: { type: "Move", destination: "" },
+    whitelist: [],
   };
 }
 
-export function actionLabel(action: Action): string {
+export function actionLabel(action: Action, t: TFunction): string {
   switch (action.type) {
     case "Move":
-      return `Move to ${action.destination || "…"}`;
+      return `${t("rules.moveTo")} ${action.destination || "…"}`;
     case "Delete":
-      return `Delete after ${action.after_days} day${action.after_days !== 1 ? "s" : ""}`;
-    case "Ignore":
-      return "Ignore";
+      return t("rules.deleteAfterDays", { count: action.after_days });
   }
 }
 
-export function conditionSummary(text: string): string {
-  if (!text || text === "*") return "Match all files";
+export function conditionSummary(text: string, t: TFunction): string {
+  if (!text || text === "*") return t("rules.matchAll");
   return text;
 }

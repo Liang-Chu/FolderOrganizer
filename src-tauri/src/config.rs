@@ -71,6 +71,9 @@ pub struct WatchedFolder {
     pub path: PathBuf,
     pub enabled: bool,
     pub rules: Vec<Rule>,
+    /// Glob patterns for files that should never be processed in this folder
+    #[serde(default)]
+    pub whitelist: Vec<String>,
 }
 
 // ── Composable Rule System ──────────────────────────────────
@@ -91,6 +94,10 @@ pub struct Rule {
     #[serde(default)]
     pub condition_text: String,
     pub action: Action,
+    /// Glob patterns for files that this rule should skip.
+    /// For Move rules, the destination folder is auto-whitelisted.
+    #[serde(default)]
+    pub whitelist: Vec<String>,
 }
 
 impl Rule {
@@ -130,8 +137,6 @@ pub enum Action {
     Move { destination: PathBuf },
     /// Schedule file for deletion after N days (0 = immediate on next scan)
     Delete { after_days: u32 },
-    /// Do nothing — skip this file
-    Ignore,
 }
 
 impl Default for AppConfig {
@@ -145,10 +150,34 @@ impl Default for AppConfig {
 
 // ── Load / Save ─────────────────────────────────────────────
 
+/// Read a file to string, handling BOM (UTF-8 BOM and UTF-16 LE/BE).
+pub fn read_file_strip_bom(path: &std::path::Path) -> Result<String, String> {
+    let raw = fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    // UTF-16 LE BOM: FF FE
+    if raw.len() >= 2 && raw[0] == 0xFF && raw[1] == 0xFE {
+        let u16_iter = raw[2..].chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]]));
+        return String::from_utf16(&u16_iter.collect::<Vec<u16>>())
+            .map_err(|e| format!("Invalid UTF-16 LE: {}", e));
+    }
+
+    // UTF-16 BE BOM: FE FF
+    if raw.len() >= 2 && raw[0] == 0xFE && raw[1] == 0xFF {
+        let u16_iter = raw[2..].chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]]));
+        return String::from_utf16(&u16_iter.collect::<Vec<u16>>())
+            .map_err(|e| format!("Invalid UTF-16 BE: {}", e));
+    }
+
+    // UTF-8 BOM: EF BB BF
+    let text = String::from_utf8(raw).map_err(|e| format!("Invalid UTF-8: {}", e))?;
+    let text = text.strip_prefix('\u{FEFF}').unwrap_or(&text).to_string();
+    Ok(text)
+}
+
 pub fn load_config() -> AppConfig {
     let path = config_path();
     if path.exists() {
-        let data = fs::read_to_string(&path).unwrap_or_default();
+        let data = read_file_strip_bom(&path).unwrap_or_default();
         serde_json::from_str(&data).unwrap_or_default()
     } else {
         let config = AppConfig::default();

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { RefreshCw, Undo2 } from "lucide-react";
 import * as api from "../api";
 import type { ActivityLogEntry, UndoEntry } from "../types";
 
 export default function ActivityPage() {
+  const { t } = useTranslation();
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [undoEntries, setUndoEntries] = useState<UndoEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +44,13 @@ export default function ActivityPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Activity Log</h2>
+        <h2 className="text-2xl font-bold">{t("activity.title")}</h2>
         <button
           onClick={loadData}
           className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm font-medium transition-colors"
         >
           <RefreshCw size={16} />
-          Refresh
+          {t("activity.refresh")}
         </button>
       </div>
 
@@ -56,7 +58,7 @@ export default function ActivityPage() {
       {undoEntries.length > 0 && (
         <div className="bg-amber-950/30 border border-amber-800 rounded-xl p-4">
           <h3 className="text-sm font-semibold text-amber-400 mb-3">
-            Recoverable Actions
+            {t("activity.recoverable")}
           </h3>
           <div className="space-y-2">
             {undoEntries.slice(0, 5).map((entry) => (
@@ -69,14 +71,14 @@ export default function ActivityPage() {
                 </span>
                 <div className="flex items-center gap-3 ml-3">
                   <span className="text-xs text-zinc-500">
-                    expires {entry.expires_at}
+                    {t("activity.expires", { date: entry.expires_at })}
                   </span>
                   <button
                     onClick={() => handleUndo(entry.id)}
                     className="flex items-center gap-1 px-3 py-1 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-medium"
                   >
                     <Undo2 size={14} />
-                    Undo
+                    {t("activity.undo")}
                   </button>
                 </div>
               </div>
@@ -90,24 +92,24 @@ export default function ActivityPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-zinc-800 text-zinc-400">
-              <th className="text-left px-5 py-3 font-medium">File</th>
-              <th className="text-left px-5 py-3 font-medium">Action</th>
-              <th className="text-left px-5 py-3 font-medium">Rule</th>
-              <th className="text-left px-5 py-3 font-medium">Result</th>
-              <th className="text-left px-5 py-3 font-medium">Time</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerFile")}</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerAction")}</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerRule")}</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerResult")}</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerTime")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {loading ? (
               <tr>
                 <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
-                  Loading...
+                  {t("common.loading")}
                 </td>
               </tr>
             ) : entries.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
-                  No activity recorded yet.
+                  {t("activity.noActivity")}
                 </td>
               </tr>
             ) : (
@@ -146,15 +148,15 @@ export default function ActivityPage() {
           disabled={page === 0}
           className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg text-sm"
         >
-          Previous
+          {t("activity.previous")}
         </button>
-        <span className="px-4 py-2 text-sm text-zinc-500">Page {page + 1}</span>
+        <span className="px-4 py-2 text-sm text-zinc-500">{t("activity.page", { page: page + 1 })}</span>
         <button
           onClick={() => setPage(page + 1)}
           disabled={entries.length < PAGE_SIZE}
           className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg text-sm"
         >
-          Next
+          {t("activity.next")}
         </button>
       </div>
     </div>

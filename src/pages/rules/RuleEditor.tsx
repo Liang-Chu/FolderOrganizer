@@ -1,10 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Check,
   X,
   AlertCircle,
   TestTube2,
   FolderOpen,
+  Plus,
+  Trash2,
+  ShieldCheck,
 } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import * as api from "../../api";
@@ -20,6 +24,7 @@ interface RuleEditorProps {
 }
 
 export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: RuleEditorProps) {
+  const { t } = useTranslation();
   // Pre-fill destination with root path for new rules
   const initialRule = { ...rule };
   if (isNew && initialRule.action.type === "Move" && !initialRule.action.destination) {
@@ -27,6 +32,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
   }
   const [draft, setDraft] = useState<Rule>(initialRule);
   const [conditionText, setConditionText] = useState(rule.condition_text || "*");
+  const [whitelistInput, setWhitelistInput] = useState("");
 
   const [conditionError, setConditionError] = useState<string | null>(null);
   const [conditionValid, setConditionValid] = useState(true);
@@ -114,24 +120,24 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
   return (
     <div className="bg-zinc-900 rounded-xl border border-blue-600 p-5 space-y-5">
       <h4 className="font-semibold text-blue-400">
-        {isNew ? "New Rule" : "Edit Rule"}
+        {isNew ? t("rules.newRule") : t("rules.editRule")}
       </h4>
 
       {/* Name & description */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-zinc-400 block mb-1">Name *</label>
+          <label className="text-xs text-zinc-400 block mb-1">{t("rules.name")} *</label>
           <input
             type="text"
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            placeholder="e.g. PDFs to Documents"
+            placeholder={t("rules.namePlaceholder")}
             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
           />
         </div>
         <div>
           <label className="text-xs text-zinc-400 block mb-1">
-            Description
+            {t("rules.description")}
           </label>
           <input
             type="text"
@@ -139,7 +145,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             onChange={(e) =>
               setDraft({ ...draft, description: e.target.value })
             }
-            placeholder="Optional description"
+            placeholder={t("rules.descriptionPlaceholder")}
             className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
           />
         </div>
@@ -148,14 +154,14 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
       {/* Condition text */}
       <div>
         <label className="text-xs text-zinc-400 block mb-1">
-          Condition (wildcard syntax)
+          {t("rules.condition")}
         </label>
         <div className="relative">
           <input
             type="text"
             value={conditionText}
             onChange={(e) => setConditionText(e.target.value)}
-            placeholder="*.pdf AND *invoice*"
+            placeholder={t("rules.conditionPlaceholder")}
             className={`w-full px-3 py-2 bg-zinc-800 border rounded-lg text-sm font-mono focus:outline-none ${
               conditionError
                 ? "border-red-500 focus:border-red-500"
@@ -183,34 +189,33 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         <div className="mt-2 text-xs text-zinc-500 space-y-1">
           <div className="flex flex-wrap gap-x-4 gap-y-0.5">
             <span>
-              <code className="text-zinc-400">*.pdf</code> — glob (wildcard match)
+              <code className="text-zinc-400">*.pdf</code> — {t("rules.conditionHelpGlob")}
             </span>
             <span>
-              <code className="text-zinc-400">*report*</code> — contains "report"
+              <code className="text-zinc-400">*report*</code> — {t("rules.conditionHelpContains")}
             </span>
             <span>
-              <code className="text-zinc-400">?</code> — single character
+              <code className="text-zinc-400">?</code> — {t("rules.conditionHelpSingle")}
             </span>
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-0.5">
             <span>
               <code className="text-zinc-400">AND</code>{" "}
               <code className="text-zinc-400">OR</code>{" "}
-              <code className="text-zinc-400">NOT</code> — combinators
+              <code className="text-zinc-400">NOT</code> — {t("rules.conditionHelpCombinators")}
             </span>
             <span>
-              <code className="text-zinc-400">(…)</code> — grouping
+              <code className="text-zinc-400">(…)</code> — {t("rules.conditionHelpGrouping")}
             </span>
           </div>
           <div>
             <span>
-              <code className="text-zinc-400">/^IMG_\d+\.jpg$/</code> — regex
-              (wrap pattern in <code className="text-zinc-400">/</code> slashes for
-              regular expressions)
+              <code className="text-zinc-400">/^IMG_\d+\.jpg$/</code> — {t("rules.conditionHelpRegex")}{" "}
+              <code className="text-zinc-400">/</code> {t("rules.conditionHelpRegexSlashes")}
             </span>
           </div>
           <p className="text-zinc-600 mt-1">
-            Examples:{" "}
+            {t("rules.conditionHelpExamples")}{" "}
             <code className="text-zinc-500">*.jpg OR *.png</code>
             {" · "}
             <code className="text-zinc-500">(*.pdf OR *.docx) AND *invoice*</code>
@@ -225,7 +230,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
       {/* Live test */}
       <div>
         <label className="text-xs text-zinc-400 block mb-1">
-          Test against filename
+          {t("rules.testLabel")}
         </label>
         <div className="flex gap-2">
           <input
@@ -233,7 +238,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             value={testFileName}
             onChange={(e) => setTestFileName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleTest()}
-            placeholder="invoice_2026.pdf"
+            placeholder={t("rules.testPlaceholder")}
             className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
           />
           <button
@@ -242,7 +247,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 border border-zinc-700 rounded-lg text-sm transition-colors"
           >
             <TestTube2 size={14} />
-            Test
+            {t("rules.testBtn")}
           </button>
           {testResult !== null && (
             <span
@@ -250,11 +255,11 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             >
               {testResult ? (
                 <>
-                  <Check size={14} /> Match
+                  <Check size={14} /> {t("rules.match")}
                 </>
               ) : (
                 <>
-                  <X size={14} /> No match
+                  <X size={14} /> {t("rules.noMatch")}
                 </>
               )}
             </span>
@@ -264,19 +269,19 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
 
       {/* Action */}
       <div>
-        <label className="text-xs text-zinc-400 block mb-1">Action</label>
+        <label className="text-xs text-zinc-400 block mb-1">{t("rules.action")}</label>
         <div className="flex gap-2 mb-3">
-          {(["Move", "Delete", "Ignore"] as ActionType[]).map((t) => (
+          {(["Move", "Delete"] as ActionType[]).map((aType) => (
             <button
-              key={t}
-              onClick={() => handleActionTypeChange(t)}
+              key={aType}
+              onClick={() => handleActionTypeChange(aType)}
               className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                actionType === t
+                actionType === aType
                   ? "bg-blue-600 border-blue-500 text-white"
                   : "bg-zinc-800 border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600"
               }`}
             >
-              {t}
+              {t(`rules.action${aType}`)}
             </button>
           ))}
         </div>
@@ -284,7 +289,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         {actionType === "Move" && draft.action.type === "Move" && (
           <div>
             <label className="text-xs text-zinc-400 block mb-1">
-              Destination folder *
+              {t("rules.destination")} *
             </label>
             <div className="flex gap-2">
               <input
@@ -312,7 +317,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
                   const selected = await open({
                     directory: true,
                     multiple: false,
-                    title: "Select destination folder",
+                    title: t("rules.selectDestination"),
                     defaultPath: startPath,
                   });
                   if (selected) {
@@ -325,7 +330,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
                 className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               >
                 <FolderOpen size={14} />
-                Browse
+                {t("rules.browse")}
               </button>
             </div>
             {destError && (
@@ -337,7 +342,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         {actionType === "Delete" && draft.action.type === "Delete" && (
           <div>
             <label className="text-xs text-zinc-400 block mb-1">
-              Delete after (days)
+              {t("rules.deleteAfter")}
             </label>
             <input
               type="number"
@@ -355,16 +360,76 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
               className="w-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
             />
             <p className="text-xs text-zinc-500 mt-1">
-              0 = delete on next scan
+              {t("rules.deleteImmediate")}
             </p>
           </div>
         )}
+      </div>
 
-        {actionType === "Ignore" && (
-          <p className="text-xs text-zinc-500">
-            Matching files will be skipped by all subsequent rules.
-          </p>
+      {/* Rule Whitelist */}
+      <div>
+        <label className="text-xs text-zinc-400 flex items-center gap-1.5 mb-1">
+          <ShieldCheck size={12} />
+          {t("rules.whitelist")}
+        </label>
+        <p className="text-xs text-zinc-500 mb-2">
+          {t("rules.whitelistDesc")}
+        </p>
+        {draft.action.type === "Move" && draft.action.destination && (
+          <div className="flex items-center gap-2 mb-2 px-3 py-1.5 bg-emerald-950/30 border border-emerald-800/50 rounded-lg">
+            <ShieldCheck size={12} className="text-emerald-400 flex-shrink-0" />
+            <span className="text-xs text-emerald-400">
+              {t("rules.autoWhitelist")}: <span className="font-mono">{draft.action.destination}</span>
+            </span>
+          </div>
         )}
+        <div className="space-y-1.5">
+          {draft.whitelist.map((pattern, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
+                {pattern}
+              </span>
+              <button
+                onClick={() => {
+                  const updated = [...draft.whitelist];
+                  updated.splice(idx, 1);
+                  setDraft({ ...draft, whitelist: updated });
+                }}
+                className="text-zinc-500 hover:text-red-400 transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            value={whitelistInput}
+            onChange={(e) => setWhitelistInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && whitelistInput.trim()) {
+                setDraft({ ...draft, whitelist: [...draft.whitelist, whitelistInput.trim()] });
+                setWhitelistInput("");
+              }
+            }}
+            placeholder={t("rules.whitelistPlaceholder")}
+            className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
+          />
+          <button
+            onClick={() => {
+              if (whitelistInput.trim()) {
+                setDraft({ ...draft, whitelist: [...draft.whitelist, whitelistInput.trim()] });
+                setWhitelistInput("");
+              }
+            }}
+            disabled={!whitelistInput.trim()}
+            className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 border border-zinc-700 rounded-lg text-sm transition-colors"
+          >
+            <Plus size={14} />
+            {t("rules.whitelistAdd")}
+          </button>
+        </div>
       </div>
 
       {/* Enabled toggle */}
@@ -375,7 +440,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
           onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
           className="accent-blue-600"
         />
-        <span className="text-sm text-zinc-300">Enabled</span>
+        <span className="text-sm text-zinc-300">{t("rules.enabled")}</span>
       </label>
 
       {/* Save / Cancel */}
@@ -384,14 +449,14 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
           onClick={onCancel}
           className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg text-sm transition-colors"
         >
-          Cancel
+          {t("rules.cancel")}
         </button>
         <button
           onClick={handleSave}
           disabled={!canSave}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
         >
-          {isNew ? "Create Rule" : "Save Changes"}
+          {isNew ? t("rules.create") : t("rules.save")}
         </button>
       </div>
     </div>

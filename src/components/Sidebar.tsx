@@ -1,4 +1,5 @@
 import { NavLink } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -9,20 +10,22 @@ import {
 } from "lucide-react";
 
 const navItems = [
-  { to: "/", icon: LayoutDashboard, label: "Dashboard" },
-  { to: "/folders", icon: FolderOpen, label: "Folders" },
-  { to: "/rules", icon: ListChecks, label: "Rules" },
-  { to: "/activity", icon: Activity, label: "Activity" },
-  { to: "/data", icon: Database, label: "Data" },
-  { to: "/settings", icon: Settings, label: "Settings" },
+  { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard" },
+  { to: "/folders", icon: FolderOpen, labelKey: "nav.folders" },
+  { to: "/rules", icon: ListChecks, labelKey: "nav.rules" },
+  { to: "/activity", icon: Activity, labelKey: "nav.activity" },
+  { to: "/data", icon: Database, labelKey: "nav.data" },
+  { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ];
 
 export default function Sidebar() {
+  const { t } = useTranslation();
+
   return (
     <aside className="w-56 bg-zinc-900 border-r border-zinc-800 flex flex-col h-full">
       <div className="px-5 py-4 border-b border-zinc-800">
         <h1 className="text-lg font-bold text-white tracking-tight">
-          Download Organizer
+          {t("app.name")}
         </h1>
       </div>
       <nav className="flex-1 px-3 py-3 space-y-1">
@@ -40,12 +43,12 @@ export default function Sidebar() {
             }
           >
             <item.icon size={18} />
-            {item.label}
+            {t(item.labelKey)}
           </NavLink>
         ))}
       </nav>
       <div className="px-5 py-3 border-t border-zinc-800 text-xs text-zinc-500">
-        v0.1.0
+        {t("app.version")}
       </div>
     </aside>
   );

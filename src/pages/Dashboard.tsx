@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   FolderOpen,
   Activity,
@@ -10,6 +11,7 @@ import * as api from "../api";
 import type { AppConfig, ActivityLogEntry } from "../types";
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [recentActivity, setRecentActivity] = useState<ActivityLogEntry[]>([]);
   const [watcherRunning, setWatcherRunning] = useState(false);
@@ -53,7 +55,7 @@ export default function Dashboard() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full text-zinc-500">
-        Loading...
+        {t("common.loading")}
       </div>
     );
   }
@@ -65,14 +67,14 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Dashboard</h2>
+        <h2 className="text-2xl font-bold">{t("dashboard.title")}</h2>
         <div className="flex gap-2">
           <button
             onClick={handleScan}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm font-medium transition-colors"
           >
             <RefreshCw size={16} />
-            Scan Now
+            {t("dashboard.scanNow")}
           </button>
           <button
             onClick={toggleWatcher}
@@ -83,7 +85,7 @@ export default function Dashboard() {
             }`}
           >
             {watcherRunning ? <Pause size={16} /> : <Play size={16} />}
-            {watcherRunning ? "Pause" : "Start"}
+            {watcherRunning ? t("dashboard.pause") : t("dashboard.start")}
           </button>
         </div>
       </div>
@@ -93,14 +95,14 @@ export default function Dashboard() {
         <div className="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
           <div className="flex items-center gap-3 text-zinc-400 mb-2">
             <FolderOpen size={20} />
-            <span className="text-sm font-medium">Watched Folders</span>
+            <span className="text-sm font-medium">{t("dashboard.watchedFolders")}</span>
           </div>
           <p className="text-3xl font-bold">{enabledFolders}</p>
         </div>
         <div className="bg-zinc-900 rounded-xl p-5 border border-zinc-800">
           <div className="flex items-center gap-3 text-zinc-400 mb-2">
             <Activity size={20} />
-            <span className="text-sm font-medium">Active Rules</span>
+            <span className="text-sm font-medium">{t("dashboard.activeRules")}</span>
           </div>
           <p className="text-3xl font-bold">{totalRules}</p>
         </div>
@@ -111,10 +113,10 @@ export default function Dashboard() {
                 watcherRunning ? "bg-green-500" : "bg-zinc-600"
               }`}
             />
-            <span className="text-sm font-medium">Watcher Status</span>
+            <span className="text-sm font-medium">{t("dashboard.watcherStatus")}</span>
           </div>
           <p className="text-3xl font-bold">
-            {watcherRunning ? "Running" : "Stopped"}
+            {watcherRunning ? t("dashboard.running") : t("dashboard.stopped")}
           </p>
         </div>
       </div>
@@ -122,11 +124,11 @@ export default function Dashboard() {
       {/* Recent activity */}
       <div className="bg-zinc-900 rounded-xl border border-zinc-800">
         <div className="px-5 py-4 border-b border-zinc-800">
-          <h3 className="font-semibold">Recent Activity</h3>
+          <h3 className="font-semibold">{t("dashboard.recentActivity")}</h3>
         </div>
         {recentActivity.length === 0 ? (
           <div className="px-5 py-8 text-center text-zinc-500 text-sm">
-            No activity yet. Add folders and rules to get started.
+            {t("dashboard.noActivity")}
           </div>
         ) : (
           <div className="divide-y divide-zinc-800">
@@ -138,7 +140,7 @@ export default function Dashboard() {
                 <div>
                   <p className="text-sm font-medium">{entry.file_name}</p>
                   <p className="text-xs text-zinc-500">
-                    {entry.action} — {entry.rule_name ?? "manual"}
+                    {entry.action} — {entry.rule_name ?? t("dashboard.manual")}
                   </p>
                 </div>
                 <div className="text-right">

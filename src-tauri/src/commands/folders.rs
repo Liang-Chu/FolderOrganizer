@@ -31,6 +31,7 @@ pub fn add_watched_folder(state: State<AppState>, path: String) -> Result<Watche
         path: folder_path,
         enabled: true,
         rules: Vec::new(),
+        whitelist: Vec::new(),
     };
 
     config.folders.push(folder.clone());
@@ -57,6 +58,39 @@ pub fn toggle_watched_folder(
     if let Some(folder) = config.folders.iter_mut().find(|f| f.id == folder_id) {
         folder.enabled = enabled;
     }
+    config::save_config(&config)?;
+    Ok(())
+}
+
+// ── Folder Whitelist Commands ───────────────────────────────
+
+#[tauri::command]
+pub fn get_folder_whitelist(
+    state: State<AppState>,
+    folder_id: String,
+) -> Result<Vec<String>, String> {
+    let config = state.config.lock().map_err(|e| e.to_string())?;
+    let folder = config
+        .folders
+        .iter()
+        .find(|f| f.id == folder_id)
+        .ok_or("Folder not found")?;
+    Ok(folder.whitelist.clone())
+}
+
+#[tauri::command]
+pub fn set_folder_whitelist(
+    state: State<AppState>,
+    folder_id: String,
+    whitelist: Vec<String>,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    let folder = config
+        .folders
+        .iter_mut()
+        .find(|f| f.id == folder_id)
+        .ok_or("Folder not found")?;
+    folder.whitelist = whitelist;
     config::save_config(&config)?;
     Ok(())
 }

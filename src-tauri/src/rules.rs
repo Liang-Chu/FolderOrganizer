@@ -18,6 +18,68 @@ pub struct RuleActionResult {
     pub details: Option<String>,
 }
 
+/// Check if a filename matches any glob pattern in a whitelist.
+fn is_whitelisted(file_name: &str, whitelist: &[String]) -> bool {
+    let name_lower = file_name.to_lowercase();
+    for pattern in whitelist {
+        if glob_match(&pattern.to_lowercase(), &name_lower) {
+            return true;
+        }
+    }
+    false
+}
+
+/// Simple glob matching (same logic as condition.rs glob matcher).
+fn glob_match(pattern: &str, text: &str) -> bool {
+    let p = pattern.chars().peekable();
+    let t = text.chars().peekable();
+    glob_match_impl(&p.collect::<Vec<_>>(), &t.collect::<Vec<_>>(), 0, 0)
+}
+
+fn glob_match_impl(pattern: &[char], text: &[char], pi: usize, ti: usize) -> bool {
+    let (mut pi, mut ti) = (pi, ti);
+    while pi < pattern.len() && ti < text.len() {
+        match pattern[pi] {
+            '*' => {
+                // Try matching rest of pattern at every position
+                for i in ti..=text.len() {
+                    if glob_match_impl(pattern, text, pi + 1, i) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            '?' => {
+                pi += 1;
+                ti += 1;
+            }
+            c => {
+                if c != text[ti] {
+                    return false;
+                }
+                pi += 1;
+                ti += 1;
+            }
+        }
+    }
+    // Consume trailing wildcards
+    while pi < pattern.len() && pattern[pi] == '*' {
+        pi += 1;
+    }
+    pi == pattern.len() && ti == text.len()
+}
+
+/// Check if a file is inside a given directory (the Move destination).
+/// Used to auto-whitelist files already at the destination.
+fn is_file_in_dir(file_path: &Path, dir: &Path) -> bool {
+    if let (Ok(file_canon), Ok(dir_canon)) = (file_path.canonicalize(), dir.canonicalize()) {
+        file_canon.starts_with(&dir_canon)
+    } else {
+        // Fallback: simple prefix check
+        file_path.starts_with(dir)
+    }
+}
+
 /// Evaluate a single file against a folder's rules (in priority order).
 /// First matching rule wins. Returns the action result, or None if no match.
 pub fn evaluate_file(
@@ -31,9 +93,26 @@ pub fn evaluate_file(
         .to_string_lossy()
         .to_string();
 
+    // Check folder-level whitelist first
+    if is_whitelisted(&file_name, &folder.whitelist) {
+        return None;
+    }
+
     for rule in &folder.rules {
         if !rule.is_enabled() {
             continue;
+        }
+
+        // Check rule-level whitelist
+        if is_whitelisted(&file_name, &rule.whitelist) {
+            continue;
+        }
+
+        // Auto-whitelist: if this is a Move rule, skip files already in the destination
+        if let Action::Move { ref destination } = rule.action {
+            if is_file_in_dir(file_path, destination) {
+                continue;
+            }
         }
 
         // Test condition tree against filename
@@ -90,15 +169,6 @@ fn execute_action(
                 details: Some(format!("Scheduled for deletion in {} days", after_days)),
             }
         }
-
-        Action::Ignore => RuleActionResult {
-            file_path: file_path.to_string_lossy().to_string(),
-            file_name: file_name.to_string(),
-            action: "ignored".to_string(),
-            rule_name: rule.name.clone(),
-            success: true,
-            details: None,
-        },
     }
 }
 

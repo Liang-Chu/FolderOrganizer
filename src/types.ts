@@ -22,6 +22,8 @@ export interface WatchedFolder {
   path: string;
   enabled: boolean;
   rules: Rule[];
+  /** Glob patterns for files that should never be processed in this folder */
+  whitelist: string[];
 }
 
 // ── Composable Rule System ──────────────────────────────────
@@ -35,6 +37,8 @@ export interface Rule {
   /** Human-readable text form: `*.pdf AND *invoice*` */
   condition_text: string;
   action: Action;
+  /** Glob patterns for files this rule should skip. Move destination is auto-whitelisted. */
+  whitelist: string[];
 }
 
 /**
@@ -63,8 +67,7 @@ export type Condition =
  */
 export type Action =
   | { type: "Move"; destination: string }
-  | { type: "Delete"; after_days: number }
-  | { type: "Ignore" };
+  | { type: "Delete"; after_days: number };
 
 export interface ActivityLogEntry {
   id: string;

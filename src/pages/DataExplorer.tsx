@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Database,
   Search,
@@ -23,6 +24,7 @@ function friendlyTableName(name: string): string {
 }
 
 export default function DataExplorer() {
+  const { t } = useTranslation();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [selectedTable, setSelectedTable] = useState(TABLES[0]);
   const [data, setData] = useState<TableQueryResult | null>(null);
@@ -77,7 +79,7 @@ export default function DataExplorer() {
   };
 
   const handleClear = async () => {
-    if (!confirm(`Clear all rows from "${friendlyTableName(selectedTable)}"? This cannot be undone.`)) {
+    if (!confirm(t("data.clearConfirm", { table: friendlyTableName(selectedTable) }))) {
       return;
     }
     setClearing(true);
@@ -102,7 +104,7 @@ export default function DataExplorer() {
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Database size={24} />
-          Data Explorer
+          {t("data.title")}
         </h2>
         <button
           onClick={async () => {
@@ -112,7 +114,7 @@ export default function DataExplorer() {
           className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
         >
           <RefreshCw size={14} />
-          Refresh
+          {t("data.refresh")}
         </button>
       </div>
 
@@ -120,21 +122,21 @@ export default function DataExplorer() {
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
-            <p className="text-xs text-zinc-500 mb-1">Database Size</p>
+            <p className="text-xs text-zinc-500 mb-1">{t("data.dbSize")}</p>
             <p className="text-lg font-semibold">{formatBytes(stats.db_size_bytes)}</p>
           </div>
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
-            <p className="text-xs text-zinc-500 mb-1">Trash Staging</p>
+            <p className="text-xs text-zinc-500 mb-1">{t("data.trashStaging")}</p>
             <p className="text-lg font-semibold">{formatBytes(stats.trash_size_bytes)}</p>
           </div>
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
-            <p className="text-xs text-zinc-500 mb-1">Total Records</p>
+            <p className="text-xs text-zinc-500 mb-1">{t("data.totalRecords")}</p>
             <p className="text-lg font-semibold">
               {stats.tables.reduce((s, t) => s + t.row_count, 0).toLocaleString()}
             </p>
           </div>
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
-            <p className="text-xs text-zinc-500 mb-1">Location</p>
+            <p className="text-xs text-zinc-500 mb-1">{t("data.location")}</p>
             <p
               className="text-xs font-mono text-blue-400 hover:text-blue-300 cursor-pointer truncate mt-1"
               title={dbPath}
@@ -184,7 +186,7 @@ export default function DataExplorer() {
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="Search all columns…"
+            placeholder={t("data.searchPlaceholder")}
             className="w-full pl-9 pr-3 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 placeholder-zinc-600"
           />
         </div>
@@ -192,7 +194,7 @@ export default function DataExplorer() {
           onClick={handleSearch}
           className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm transition-colors"
         >
-          Search
+          {t("data.search")}
         </button>
         {search && (
           <button
@@ -202,7 +204,7 @@ export default function DataExplorer() {
             }}
             className="text-xs text-zinc-500 hover:text-zinc-300"
           >
-            Clear filter
+            {t("data.clearFilter")}
           </button>
         )}
         <button
@@ -211,7 +213,7 @@ export default function DataExplorer() {
           className="flex items-center gap-1.5 px-3 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800/50 text-red-400 disabled:opacity-30 rounded-lg text-sm transition-colors"
         >
           <Trash2 size={14} />
-          Clear Table
+          {t("data.clearTable")}
         </button>
       </div>
 
@@ -219,13 +221,13 @@ export default function DataExplorer() {
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden">
         {loading ? (
           <div className="px-5 py-12 text-center text-zinc-500 text-sm">
-            Loading…
+            {t("data.loading")}
           </div>
         ) : !data || data.rows.length === 0 ? (
           <div className="px-5 py-12 text-center text-zinc-500 text-sm">
             {search
-              ? "No rows match your search."
-              : "This table is empty."}
+              ? t("data.noMatchSearch")
+              : t("data.tableEmpty")}
           </div>
         ) : (
           <div className="overflow-auto max-h-[60vh]">
@@ -276,8 +278,8 @@ export default function DataExplorer() {
         {data && data.total > 0 && (
           <div className="flex items-center justify-between px-4 py-3 border-t border-zinc-800 text-xs text-zinc-500">
             <span>
-              {data.total.toLocaleString()} row{data.total !== 1 && "s"}
-              {search && " (filtered)"}
+              {t("data.rowCount", { count: data.total })}
+              {search && ` ${t("data.filtered")}`}
             </span>
             <div className="flex items-center gap-2">
               <button
@@ -288,7 +290,7 @@ export default function DataExplorer() {
                 <ChevronLeft size={16} />
               </button>
               <span>
-                Page {page + 1} of {totalPages || 1}
+                {t("data.pageOf", { current: page + 1, total: totalPages || 1 })}
               </span>
               <button
                 onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
@@ -306,12 +308,12 @@ export default function DataExplorer() {
       <div className="flex items-center gap-2 text-xs text-zinc-600">
         <HardDrive size={12} />
         <span>
-          Data is pruned automatically based on your retention &amp; max storage settings in{" "}
+          {t("data.storageNote")}{" "}
           <span
             className="text-blue-400 hover:text-blue-300 cursor-pointer"
             onClick={() => window.location.hash = "#/settings"}
           >
-            Settings
+            {t("data.settingsLink")}
           </span>.
         </span>
       </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import { GripVertical, Trash2 } from "lucide-react";
 import type { Rule } from "../../types";
 import { conditionSummary } from "./helpers";
@@ -12,6 +13,8 @@ interface RuleListItemProps {
 }
 
 export function RuleListItem({ rule, isEditing, onEdit, onDelete, onToggle }: RuleListItemProps) {
+  const { t } = useTranslation();
+
   return (
     <div
       className={`bg-zinc-900 rounded-xl border px-5 py-3 flex items-center justify-between transition-colors ${
@@ -29,7 +32,7 @@ export function RuleListItem({ rule, isEditing, onEdit, onDelete, onToggle }: Ru
           <p className="text-sm font-medium truncate">{rule.name}</p>
           <p className="text-xs text-zinc-500">
             <span className="font-mono text-zinc-400">
-              {conditionSummary(rule.condition_text)}
+              {conditionSummary(rule.condition_text, t)}
             </span>
             {" → "}
             <ActionDisplay action={rule.action} />
@@ -50,13 +53,13 @@ export function RuleListItem({ rule, isEditing, onEdit, onDelete, onToggle }: Ru
               : "border-zinc-700 text-zinc-500 hover:bg-zinc-800"
           }`}
         >
-          {rule.enabled ? "On" : "Off"}
+          {rule.enabled ? t("rules.on") : t("rules.off")}
         </button>
         <button
           onClick={() => onEdit(rule)}
           className="text-xs px-3 py-1 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
         >
-          Edit
+          {t("rules.edit")}
         </button>
         <button
           onClick={() => onDelete(rule.id)}

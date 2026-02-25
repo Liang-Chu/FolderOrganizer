@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import * as api from "../../api";
 import type { Action } from "../../types";
 import { actionLabel } from "./helpers";
@@ -9,6 +10,7 @@ interface ActionDisplayProps {
 
 /** Renders action info with a clickable destination path for Move rules. */
 export function ActionDisplay({ action }: ActionDisplayProps) {
+  const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
 
   const handleOpenFolder = async (path: string) => {
@@ -24,7 +26,7 @@ export function ActionDisplay({ action }: ActionDisplayProps) {
   if (action.type === "Move") {
     return (
       <span>
-        Move to{" "}
+        {t("rules.moveTo")}{" "}
         {action.destination ? (
           <>
             <span
@@ -39,7 +41,7 @@ export function ActionDisplay({ action }: ActionDisplayProps) {
             </span>
             {error && (
               <span className="block text-red-400 text-xs mt-0.5" title={error}>
-                Failed to open: {error}
+                {t("rules.failedToOpen", { error })}
               </span>
             )}
           </>
@@ -50,5 +52,5 @@ export function ActionDisplay({ action }: ActionDisplayProps) {
     );
   }
 
-  return <span>{actionLabel(action)}</span>;
+  return <span>{actionLabel(action, t)}</span>;
 }

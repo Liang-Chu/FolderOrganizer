@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Plus, ChevronDown } from "lucide-react";
 import * as api from "../../api";
 import type { WatchedFolder, Rule } from "../../types";
@@ -7,6 +8,7 @@ import { RuleEditor } from "./RuleEditor";
 import { RuleListItem } from "./RuleListItem";
 
 export default function Rules() {
+  const { t } = useTranslation();
   const [folders, setFolders] = useState<WatchedFolder[]>([]);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [rules, setRules] = useState<Rule[]>([]);
@@ -70,14 +72,14 @@ export default function Rules() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Rules</h2>
+        <h2 className="text-2xl font-bold">{t("rules.title")}</h2>
         <button
           onClick={handleAddRule}
           disabled={!selectedFolderId}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 rounded-lg text-sm font-medium transition-colors"
         >
           <Plus size={16} />
-          Add Rule
+          {t("rules.addRule")}
         </button>
       </div>
 
@@ -93,7 +95,7 @@ export default function Rules() {
           className="w-full px-4 py-2 bg-zinc-900 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500 appearance-none"
         >
           {folders.length === 0 && (
-            <option value="">No watched folders</option>
+            <option value="">{t("rules.noFoldersSelect")}</option>
           )}
           {folders.map((f) => (
             <option key={f.id} value={f.id}>
@@ -125,8 +127,8 @@ export default function Rules() {
       {rules.length === 0 ? (
         <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-5 py-12 text-center text-zinc-500">
           {selectedFolderId
-            ? "No rules for this folder yet. Add one above."
-            : "Select a watched folder first."}
+            ? t("rules.noRules")
+            : t("rules.selectFolder")}
         </div>
       ) : (
         <div className="space-y-2">

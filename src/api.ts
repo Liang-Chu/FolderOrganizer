@@ -19,6 +19,15 @@ export const getConfig = () => invoke<AppConfig>("get_config");
 export const saveConfig = (newConfig: AppConfig) =>
   invoke<void>("save_config_cmd", { newConfig });
 
+export const exportConfig = (path: string) =>
+  invoke<void>("export_config", { path });
+
+export const importConfig = (path: string) =>
+  invoke<void>("import_config", { path });
+
+export const getConfigPath = () =>
+  invoke<string>("get_config_path");
+
 // ── Folders ─────────────────────────────────────────────────
 
 export const getWatchedFolders = () =>
@@ -32,6 +41,12 @@ export const removeWatchedFolder = (folderId: string) =>
 
 export const toggleWatchedFolder = (folderId: string, enabled: boolean) =>
   invoke<void>("toggle_watched_folder", { folderId, enabled });
+
+export const getFolderWhitelist = (folderId: string) =>
+  invoke<string[]>("get_folder_whitelist", { folderId });
+
+export const setFolderWhitelist = (folderId: string, whitelist: string[]) =>
+  invoke<void>("set_folder_whitelist", { folderId, whitelist });
 
 // ── Rules ───────────────────────────────────────────────────
 

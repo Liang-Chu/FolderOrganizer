@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
-import { Save, FolderOpen, Database, ExternalLink } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
+import { Save, FolderOpen, Database, ExternalLink, Download, Upload } from "lucide-react";
+import { open, save, message } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router";
 import * as api from "../api";
 import type { AppConfig, AppSettings, DbStats } from "../types";
 import { formatBytes } from "../utils/format";
 
+const LANGUAGES = [
+  { code: "en", labelKey: "settings.langEn" },
+  { code: "zh", labelKey: "settings.langZh" },
+  { code: "fr", labelKey: "settings.langFr" },
+];
+
 export default function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [saved, setSaved] = useState(false);
@@ -33,10 +41,15 @@ export default function SettingsPage() {
     api.restartWatcher().catch(() => {});
   };
 
+  const handleLanguageChange = (lang: string) => {
+    i18n.changeLanguage(lang);
+    // Persisted automatically via localStorage by i18next-browser-languagedetector
+  };
+
   if (!settings) {
     return (
       <div className="flex items-center justify-center h-full text-zinc-500">
-        Loading...
+        {t("common.loading")}
       </div>
     );
   }
@@ -44,23 +57,44 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 max-w-xl">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Settings</h2>
+        <h2 className="text-2xl font-bold">{t("settings.title")}</h2>
         <button
           onClick={handleSave}
           className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
         >
           <Save size={16} />
-          {saved ? "Saved!" : "Save"}
+          {saved ? t("settings.saved") : t("settings.save")}
         </button>
       </div>
 
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 divide-y divide-zinc-800">
+        {/* Language */}
+        <div className="px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t("settings.language")}</p>
+            <p className="text-xs text-zinc-500">
+              {t("settings.languageDesc")}
+            </p>
+          </div>
+          <select
+            value={i18n.language?.substring(0, 2) || "en"}
+            onChange={(e) => handleLanguageChange(e.target.value)}
+            className="px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {t(lang.labelKey)}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Scan interval */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Scan Interval</p>
+            <p className="text-sm font-medium">{t("settings.scanInterval")}</p>
             <p className="text-xs text-zinc-500">
-              How often to check for scheduled actions (minutes)
+              {t("settings.scanIntervalDesc")}
             </p>
           </div>
           <input
@@ -80,9 +114,9 @@ export default function SettingsPage() {
         {/* Start with OS */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Start with Windows</p>
+            <p className="text-sm font-medium">{t("settings.startWithOs")}</p>
             <p className="text-xs text-zinc-500">
-              Launch automatically when you log in
+              {t("settings.startWithOsDesc")}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -101,9 +135,9 @@ export default function SettingsPage() {
         {/* Minimize to tray */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Minimize to Tray</p>
+            <p className="text-sm font-medium">{t("settings.minimizeToTray")}</p>
             <p className="text-xs text-zinc-500">
-              Keep running in system tray when window is closed
+              {t("settings.minimizeToTrayDesc")}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -125,9 +159,9 @@ export default function SettingsPage() {
         {/* Notifications */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Notifications</p>
+            <p className="text-sm font-medium">{t("settings.notifications")}</p>
             <p className="text-xs text-zinc-500">
-              Show toast notifications when files are processed
+              {t("settings.notificationsDesc")}
             </p>
           </div>
           <label className="relative inline-flex items-center cursor-pointer">
@@ -150,9 +184,9 @@ export default function SettingsPage() {
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-2">
             <div>
-              <p className="text-sm font-medium">Default Sort Root</p>
+              <p className="text-sm font-medium">{t("settings.defaultSortRoot")}</p>
               <p className="text-xs text-zinc-500">
-                Root folder for Move destinations — subfolder names resolve under this path
+                {t("settings.defaultSortRootDesc")}
               </p>
             </div>
           </div>
@@ -173,7 +207,7 @@ export default function SettingsPage() {
                 const selected = await open({
                   directory: true,
                   multiple: false,
-                  title: "Select default sort root",
+                  title: t("settings.selectSortRoot"),
                   defaultPath: startPath,
                 });
                 if (selected) {
@@ -183,7 +217,7 @@ export default function SettingsPage() {
               className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
             >
               <FolderOpen size={14} />
-              Browse
+              {t("settings.browse")}
             </button>
           </div>
         </div>
@@ -191,9 +225,9 @@ export default function SettingsPage() {
         {/* Log retention */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Log Retention</p>
+            <p className="text-sm font-medium">{t("settings.logRetention")}</p>
             <p className="text-xs text-zinc-500">
-              Days to keep activity log entries (older entries are auto-deleted)
+              {t("settings.logRetentionDesc")}
             </p>
           </div>
           <input
@@ -213,9 +247,9 @@ export default function SettingsPage() {
         {/* Max storage */}
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">Max Storage Size</p>
+            <p className="text-sm font-medium">{t("settings.maxStorage")}</p>
             <p className="text-xs text-zinc-500">
-              Maximum database size in MB (0 = unlimited, default 2048 = 2 GB)
+              {t("settings.maxStorageDesc")}
             </p>
           </div>
           <input
@@ -234,19 +268,75 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Import / Export */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-5 py-4 space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold">{t("settings.importExport")}</h3>
+          <p className="text-xs text-zinc-500">{t("settings.importExportDesc")}</p>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={async () => {
+              try {
+                const filePath = await save({
+                  defaultPath: "download-organizer-config.json",
+                  filters: [{ name: "JSON", extensions: ["json"] }],
+                  title: t("settings.exportConfig"),
+                });
+                if (!filePath) return;
+                await api.exportConfig(filePath);
+                await message(t("settings.exportSuccess"), { title: t("settings.exportConfig"), kind: "info" });
+              } catch (err: any) {
+                await message(t("settings.exportError", { error: String(err) }), { title: t("settings.exportConfig"), kind: "error" });
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm transition-colors"
+          >
+            <Download size={14} />
+            {t("settings.exportConfig")}
+          </button>
+          <button
+            onClick={async () => {
+              try {
+                const filePath = await open({
+                  multiple: false,
+                  filters: [{ name: "JSON", extensions: ["json"] }],
+                  title: t("settings.importConfig"),
+                });
+                if (!filePath) return;
+                await api.importConfig(filePath as string);
+                await message(t("settings.importSuccess"), { title: t("settings.importConfig"), kind: "info" });
+                // Reload config into UI
+                const cfg = await api.getConfig();
+                setConfig(cfg);
+                setSettings(cfg.settings);
+                // Restart watcher with imported settings
+                api.restartWatcher().catch(() => {});
+              } catch (err: any) {
+                await message(t("settings.importError", { error: String(err) }), { title: t("settings.importConfig"), kind: "error" });
+              }
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm transition-colors"
+          >
+            <Upload size={14} />
+            {t("settings.importConfig")}
+          </button>
+        </div>
+      </div>
+
       {/* Data storage summary */}
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-5 py-4 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Database size={16} className="text-zinc-400" />
-            Data Storage
+            {t("settings.dataStorage")}
           </h3>
           <button
             onClick={() => navigate("/data")}
             className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
           >
             <ExternalLink size={12} />
-            Open Data Explorer
+            {t("settings.openDataExplorer")}
           </button>
         </div>
 
@@ -254,7 +344,7 @@ export default function SettingsPage() {
           <div className="space-y-2">
             {/* Size bars */}
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Database</span>
+              <span className="text-zinc-400">{t("settings.database")}</span>
               <span className="text-zinc-300">{formatBytes(dbStats.db_size_bytes)}</span>
             </div>
             {settings.max_storage_mb > 0 && (
@@ -274,28 +364,28 @@ export default function SettingsPage() {
               </div>
             )}
             <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Trash staging</span>
+              <span className="text-zinc-400">{t("settings.trashStaging")}</span>
               <span className="text-zinc-300">{formatBytes(dbStats.trash_size_bytes)}</span>
             </div>
 
             {/* Per-table row counts */}
             <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 text-xs">
-              {dbStats.tables.map((t) => (
-                <div key={t.table_name} className="flex justify-between">
-                  <span className="text-zinc-500">{t.table_name}</span>
-                  <span className="text-zinc-400">{t.row_count.toLocaleString()} rows</span>
+              {dbStats.tables.map((tbl) => (
+                <div key={tbl.table_name} className="flex justify-between">
+                  <span className="text-zinc-500">{tbl.table_name}</span>
+                  <span className="text-zinc-400">{t("settings.rows", { count: tbl.row_count })}</span>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <p className="text-xs text-zinc-500">Loading…</p>
+          <p className="text-xs text-zinc-500">{t("common.loading")}</p>
         )}
 
         <p className="text-xs text-zinc-600 leading-relaxed">
-          All data is stored locally at{" "}
+          {t("settings.localStorageNote")}{" "}
           <code className="text-zinc-500">{dbPath || "%APPDATA%\\download-organizer\\"}</code>.
-          Nothing is sent to the cloud.
+          {" "}{t("settings.noCloud")}
         </p>
       </div>
     </div>
