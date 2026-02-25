@@ -4,14 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useNavigate } from "react-router";
 import * as api from "../api";
 import type { AppConfig, AppSettings, DbStats } from "../types";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-}
+import { formatBytes } from "../utils/format";
 
 export default function SettingsPage() {
   const [config, setConfig] = useState<AppConfig | null>(null);

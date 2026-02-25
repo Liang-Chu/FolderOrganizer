@@ -10,17 +10,10 @@ import {
 } from "lucide-react";
 import * as api from "../api";
 import type { DbStats, TableQueryResult } from "../types";
+import { formatBytes } from "../utils/format";
 
 const TABLES = ["activity_log", "file_index", "undo_history", "rule_metadata"];
 const PAGE_SIZE = 25;
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-}
 
 function friendlyTableName(name: string): string {
   return name

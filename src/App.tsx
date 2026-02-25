@@ -2,7 +2,7 @@ import { Routes, Route } from "react-router";
 import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Folders from "./pages/Folders";
-import Rules from "./pages/Rules";
+import Rules from "./pages/rules";
 import Activity from "./pages/Activity";
 import DataExplorer from "./pages/DataExplorer";
 import Settings from "./pages/Settings";
