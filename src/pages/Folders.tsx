@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
 import {
   FolderPlus,
   Trash2,
@@ -25,6 +26,7 @@ type ExpandedSection = "rules" | "whitelist" | null;
 
 export default function Folders() {
   const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [folders, setFolders] = useState<WatchedFolder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +89,24 @@ export default function Folders() {
       }
     });
   }, []);
+
+  // Auto-expand folder from query param (e.g. right-click "Watch with Folder Organizer")
+  useEffect(() => {
+    const expandId = searchParams.get("expand");
+    if (expandId && folders.length > 0) {
+      // Expand the rules section for this folder
+      setExpandedSections((prev) => ({ ...prev, [expandId]: "rules" }));
+      // Clear the param so it doesn't persist
+      setSearchParams({}, { replace: true });
+      // Scroll the folder into view
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`folder-${expandId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    }
+  }, [searchParams, folders]);
 
   // Close add-rule dropdown on outside click
   useEffect(() => {
@@ -357,6 +377,7 @@ export default function Folders() {
             return (
               <div
                 key={folder.id}
+                id={`folder-${folder.id}`}
                 className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden cursor-pointer"
                 onClick={handleFolderCardClick(folder.id)}
                 onDragOver={(e) => { e.preventDefault(); }}

@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use chrono::Timelike;
 use commands::AppState;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -73,6 +73,8 @@ pub fn run() {
     });
 
     let tray_config = config_arc.clone();
+    let cli_config = config_arc.clone();
+    let single_instance_config = config_arc.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -82,6 +84,50 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .plugin(tauri_plugin_single_instance::init(move |app, args, _cwd| {
+            // A second instance was launched — handle its args here
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+
+            // Check if the second instance passed --watch-folder
+            if let Some(pos) = args.iter().position(|a| a == "--watch-folder") {
+                if let Some(folder_path) = args.get(pos + 1) {
+                    let folder_path = folder_path.clone();
+                    let cfg = single_instance_config.clone();
+                    let app_handle = app.clone();
+
+                    std::thread::spawn(move || {
+                        let path = std::path::PathBuf::from(&folder_path);
+                        if path.exists() {
+                            let mut config = cfg.lock().unwrap();
+                            let already_exists = config.folders.iter().any(|f| f.path == path);
+                            let folder_id = if already_exists {
+                                config.folders.iter().find(|f| f.path == path).unwrap().id.clone()
+                            } else {
+                                let folder = config::WatchedFolder {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    path,
+                                    enabled: true,
+                                    rules: Vec::new(),
+                                    whitelist: Vec::new(),
+                                    watch_subdirectories: false,
+                                };
+                                let id = folder.id.clone();
+                                config.folders.push(folder);
+                                let _ = config::save_config(&config);
+                                id
+                            };
+                            drop(config);
+                            std::thread::sleep(std::time::Duration::from_millis(500));
+                            let _ = app_handle.emit("navigate-to-folder", &folder_id);
+                        }
+                    });
+                }
+            }
+        }))
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
@@ -142,7 +188,12 @@ pub fn run() {
                 .menu(&tray_menu)
                 .tooltip("Folder Organizer")
                 .on_tray_icon_event(|tray, event| {
-                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: tauri::tray::MouseButton::Left,
+                        button_state: tauri::tray::MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
                         if let Some(w) = tray.app_handle().get_webview_window("main") {
                             let _ = w.show();
                             let _ = w.unminimize();
@@ -181,6 +232,53 @@ pub fn run() {
                         }
                     }
                 });
+            }
+
+            // ── Handle --watch-folder CLI argument ──
+            let args: Vec<String> = std::env::args().collect();
+            if let Some(pos) = args.iter().position(|a| a == "--watch-folder") {
+                if let Some(folder_path) = args.get(pos + 1) {
+                    let folder_path = folder_path.clone();
+                    let cfg = cli_config.clone();
+                    let app_handle = app.handle().clone();
+
+                    // Show window immediately when launched via context menu
+                    if let Some(w) = app.get_webview_window("main") {
+                        let _ = w.show();
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
+                    }
+
+                    // Add the folder (if not already watched) and emit event after a short delay
+                    std::thread::spawn(move || {
+                        let path = std::path::PathBuf::from(&folder_path);
+                        if path.exists() {
+                            let mut config = cfg.lock().unwrap();
+                            let already_exists = config.folders.iter().any(|f| f.path == path);
+                            let folder_id = if already_exists {
+                                config.folders.iter().find(|f| f.path == path).unwrap().id.clone()
+                            } else {
+                                let folder = config::WatchedFolder {
+                                    id: uuid::Uuid::new_v4().to_string(),
+                                    path,
+                                    enabled: true,
+                                    rules: Vec::new(),
+                                    whitelist: Vec::new(),
+                                    watch_subdirectories: false,
+                                };
+                                let id = folder.id.clone();
+                                config.folders.push(folder);
+                                let _ = config::save_config(&config);
+                                id
+                            };
+                            drop(config);
+
+                            // Wait for frontend to be ready, then emit navigation event
+                            std::thread::sleep(std::time::Duration::from_millis(1500));
+                            let _ = app_handle.emit("navigate-to-folder", &folder_id);
+                        }
+                    });
+                }
             }
 
             Ok(())

@@ -1,6 +1,6 @@
 [package]
 name = "folder-organizer"
-version = "1.1.0"
+version = "1.2.0"
 description = "Lightweight desktop app to auto-organize your folders"
 authors = ["Liang Chu"]
 license = "MIT"
@@ -32,4 +32,5 @@ uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2.10.0"
 trash = "5.2.5"
+tauri-plugin-single-instance = "2.4.0"
 
