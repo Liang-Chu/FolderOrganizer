@@ -316,26 +316,30 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Auto-update toggle */}
+      {/* Update mode selector */}
       <div className="bg-zinc-900 rounded-xl border border-zinc-800">
         <div className="px-5 py-4 flex items-center justify-between">
           <div>
-            <p className="text-sm font-medium">{t("settings.autoUpdate")}</p>
+            <p className="text-sm font-medium">{t("settings.updateMode")}</p>
             <p className="text-xs text-zinc-500">
-              {t("settings.autoUpdateDesc")}
+              {t("settings.updateModeDesc")}
             </p>
           </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.auto_update}
-              onChange={(e) =>
-                setSettings({ ...settings, auto_update: e.target.checked })
-              }
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-          </label>
+          <div className="flex bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+            {(["off", "notify", "auto"] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setSettings({ ...settings, update_mode: mode })}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  settings.update_mode === mode
+                    ? "bg-blue-600 text-white"
+                    : "text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {t(`settings.updateMode_${mode}`)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

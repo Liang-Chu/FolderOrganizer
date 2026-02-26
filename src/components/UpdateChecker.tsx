@@ -17,17 +17,17 @@ export function UpdateChecker() {
   const { t } = useTranslation();
   const [state, setState] = useState<UpdateState>({ status: "idle" });
   const [dismissed, setDismissed] = useState(false);
-  const [autoUpdate, setAutoUpdate] = useState(true);
+  const [updateMode, setUpdateMode] = useState<'off' | 'notify' | 'auto'>('auto');
 
   useEffect(() => {
-    // Load the auto_update setting
+    // Load the update_mode setting
     api.getConfig().then((cfg) => {
-      setAutoUpdate(cfg.settings.auto_update);
+      setUpdateMode(cfg.settings.update_mode);
     });
   }, []);
 
   useEffect(() => {
-    if (!autoUpdate) return;
+    if (updateMode === 'off') return;
     // Check for updates 5 seconds after mount, then every 4 hours
     const timer = setTimeout(() => checkForUpdate(), 5000);
     const interval = setInterval(() => checkForUpdate(), 4 * 60 * 60 * 1000);
@@ -35,15 +35,41 @@ export function UpdateChecker() {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [autoUpdate]);
+  }, [updateMode]);
 
   const checkForUpdate = async () => {
     try {
       setState({ status: "checking" });
       const update = await check();
       if (update) {
-        setState({ status: "available", update });
-        setDismissed(false);
+        if (updateMode === 'auto') {
+          // Silent auto-update: download and install immediately
+          setState({ status: "downloading", progress: 0 });
+          let downloaded = 0;
+          let contentLength = 0;
+          await update.downloadAndInstall((event) => {
+            switch (event.event) {
+              case "Started":
+                contentLength = event.data.contentLength ?? 0;
+                break;
+              case "Progress":
+                downloaded += event.data.chunkLength;
+                setState({
+                  status: "downloading",
+                  progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
+                });
+                break;
+              case "Finished":
+                setState({ status: "ready" });
+                break;
+            }
+          });
+          setState({ status: "ready" });
+        } else {
+          // Notify mode: just show the update banner
+          setState({ status: "available", update });
+          setDismissed(false);
+        }
       } else {
         setState({ status: "upToDate" });
         // Hide the "up to date" message after 3 seconds
