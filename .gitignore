@@ -28,7 +28,7 @@ target/
 *.njsproj
 *.sln
 *.sw?
-release.ps1
+
 # Signing keys
 ~/.tauri/
 *.key
