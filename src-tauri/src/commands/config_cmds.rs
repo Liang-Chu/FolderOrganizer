@@ -1,7 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_autostart::ManagerExt;
 
 use crate::config::{self, AppConfig};
 use super::AppState;
@@ -13,7 +14,19 @@ pub fn get_config(state: State<AppState>) -> Result<AppConfig, String> {
 }
 
 #[tauri::command]
-pub fn save_config_cmd(state: State<AppState>, new_config: AppConfig) -> Result<(), String> {
+pub fn save_config_cmd(
+    app: AppHandle,
+    state: State<AppState>,
+    new_config: AppConfig,
+) -> Result<(), String> {
+    // Sync autostart with the start_with_os setting
+    let autostart = app.autolaunch();
+    if new_config.settings.start_with_os {
+        let _ = autostart.enable();
+    } else {
+        let _ = autostart.disable();
+    }
+
     config::save_config(&new_config)?;
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     *config = new_config;

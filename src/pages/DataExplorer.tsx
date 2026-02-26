@@ -1,11 +1,11 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import {
   Database,
   Search,
   ChevronLeft,
   ChevronRight,
-  Trash2,
   RefreshCw,
   HardDrive,
 } from "lucide-react";
@@ -13,18 +13,17 @@ import * as api from "../api";
 import type { DbStats, TableQueryResult } from "../types";
 import { formatBytes } from "../utils/format";
 
-const TABLES = ["activity_log", "file_index", "undo_history", "rule_metadata"];
+const TABLES = ["activity_log", "file_index", "scheduled_deletions"];
+const TABLE_LABELS: Record<string, string> = {
+  activity_log: "Activity Log",
+  file_index: "Pending Actions",
+  scheduled_deletions: "Scheduled Deletions",
+};
 const PAGE_SIZE = 25;
-
-function friendlyTableName(name: string): string {
-  return name
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 export default function DataExplorer() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DbStats | null>(null);
   const [selectedTable, setSelectedTable] = useState(TABLES[0]);
   const [data, setData] = useState<TableQueryResult | null>(null);
@@ -32,7 +31,6 @@ export default function DataExplorer() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [clearing, setClearing] = useState(false);
   const [dbPath, setDbPath] = useState("");
 
   const loadStats = useCallback(async () => {
@@ -78,22 +76,6 @@ export default function DataExplorer() {
     setSearch(searchInput);
   };
 
-  const handleClear = async () => {
-    if (!confirm(t("data.clearConfirm", { table: friendlyTableName(selectedTable) }))) {
-      return;
-    }
-    setClearing(true);
-    try {
-      await api.clearDbTable(selectedTable);
-      await loadTable();
-      await loadStats();
-    } catch (e) {
-      console.error("Failed to clear table:", e);
-    } finally {
-      setClearing(false);
-    }
-  };
-
   const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0;
   const tableRowCount = (name: string) =>
     stats?.tables.find((t) => t.table_name === name)?.row_count ?? 0;
@@ -120,14 +102,10 @@ export default function DataExplorer() {
 
       {/* Storage overview */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
             <p className="text-xs text-zinc-500 mb-1">{t("data.dbSize")}</p>
             <p className="text-lg font-semibold">{formatBytes(stats.db_size_bytes)}</p>
-          </div>
-          <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
-            <p className="text-xs text-zinc-500 mb-1">{t("data.trashStaging")}</p>
-            <p className="text-lg font-semibold">{formatBytes(stats.trash_size_bytes)}</p>
           </div>
           <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-4 py-3">
             <p className="text-xs text-zinc-500 mb-1">{t("data.totalRecords")}</p>
@@ -166,7 +144,7 @@ export default function DataExplorer() {
                 : "border-transparent text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50"
             }`}
           >
-            {friendlyTableName(table)}
+            {TABLE_LABELS[table] || table}
             <span className="ml-1.5 text-xs text-zinc-600">
               ({tableRowCount(table).toLocaleString()})
             </span>
@@ -207,14 +185,6 @@ export default function DataExplorer() {
             {t("data.clearFilter")}
           </button>
         )}
-        <button
-          onClick={handleClear}
-          disabled={clearing || (data?.total ?? 0) === 0}
-          className="flex items-center gap-1.5 px-3 py-2 bg-red-900/30 hover:bg-red-900/50 border border-red-800/50 text-red-400 disabled:opacity-30 rounded-lg text-sm transition-colors"
-        >
-          <Trash2 size={14} />
-          {t("data.clearTable")}
-        </button>
       </div>
 
       {/* Data table */}
@@ -310,8 +280,8 @@ export default function DataExplorer() {
         <span>
           {t("data.storageNote")}{" "}
           <span
-            className="text-blue-400 hover:text-blue-300 cursor-pointer"
-            onClick={() => window.location.hash = "#/settings"}
+            className="text-blue-400 hover:text-blue-300 cursor-pointer underline underline-offset-2"
+            onClick={() => navigate("/settings?highlight=log-retention")}
           >
             {t("data.settingsLink")}
           </span>.

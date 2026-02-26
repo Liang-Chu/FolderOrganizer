@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, FolderOpen, Database, ExternalLink, Download, Upload } from "lucide-react";
 import { open, save, message } from "@tauri-apps/plugin-dialog";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import * as api from "../api";
 import type { AppConfig, AppSettings, DbStats } from "../types";
 import { formatBytes } from "../utils/format";
@@ -21,6 +21,26 @@ export default function SettingsPage() {
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [dbPath, setDbPath] = useState("");
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [highlightSection, setHighlightSection] = useState<string | null>(null);
+
+  // Handle highlight param from Data Explorer link
+  useEffect(() => {
+    const highlight = searchParams.get("highlight");
+    if (highlight) {
+      // Remove the param from URL so it doesn't persist
+      setSearchParams({}, { replace: true });
+      // Wait for render then scroll + highlight
+      requestAnimationFrame(() => {
+        const el = document.getElementById(highlight);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          setHighlightSection(highlight);
+          setTimeout(() => setHighlightSection(null), 3000);
+        }
+      });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     api.getConfig().then((cfg) => {
@@ -104,7 +124,7 @@ export default function SettingsPage() {
             onChange={(e) =>
               setSettings({
                 ...settings,
-                scan_interval_minutes: parseInt(e.target.value) || 1,
+                scan_interval_minutes: Math.max(1, parseInt(e.target.value) || 1),
               })
             }
             className="w-20 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-right"
@@ -223,7 +243,12 @@ export default function SettingsPage() {
         </div>
 
         {/* Log retention */}
-        <div className="px-5 py-4 flex items-center justify-between">
+        <div
+          id="log-retention"
+          className={`px-5 py-4 flex items-center justify-between transition-colors duration-1000 rounded-lg ${
+            highlightSection === "log-retention" ? "bg-blue-900/30 ring-1 ring-blue-500/50" : ""
+          }`}
+        >
           <div>
             <p className="text-sm font-medium">{t("settings.logRetention")}</p>
             <p className="text-xs text-zinc-500">

@@ -27,6 +27,7 @@ export function createEmptyRule(): Rule {
     condition_text: "*",
     action: { type: "Move", destination: "" },
     whitelist: [],
+    match_subdirectories: false,
   };
 }
 

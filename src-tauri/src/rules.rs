@@ -115,8 +115,22 @@ pub fn evaluate_file(
             }
         }
 
-        // Test condition tree against filename
-        if !condition::evaluate(&rule.condition, &file_name) {
+        // Determine what string to match against:
+        //   - match_subdirectories=true  → relative path from watched folder (forward slashes)
+        //   - match_subdirectories=false → filename only (default)
+        let match_target = if rule.match_subdirectories {
+            // Compute relative path from the watched folder root
+            file_path
+                .strip_prefix(&folder.path)
+                .unwrap_or(file_path)
+                .to_string_lossy()
+                .replace('\\', "/")
+        } else {
+            file_name.clone()
+        };
+
+        // Test condition tree against the match target
+        if !condition::evaluate(&rule.condition, &match_target) {
             continue;
         }
 

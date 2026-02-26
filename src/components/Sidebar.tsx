@@ -3,17 +3,14 @@ import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   FolderOpen,
-  ListChecks,
-  Activity,
   Database,
   Settings,
 } from "lucide-react";
+import { UpdateChecker } from "./UpdateChecker";
 
 const navItems = [
   { to: "/", icon: LayoutDashboard, labelKey: "nav.dashboard" },
   { to: "/folders", icon: FolderOpen, labelKey: "nav.folders" },
-  { to: "/rules", icon: ListChecks, labelKey: "nav.rules" },
-  { to: "/activity", icon: Activity, labelKey: "nav.activity" },
   { to: "/data", icon: Database, labelKey: "nav.data" },
   { to: "/settings", icon: Settings, labelKey: "nav.settings" },
 ];
@@ -47,6 +44,7 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+      <UpdateChecker />
       <div className="px-5 py-3 border-t border-zinc-800 text-xs text-zinc-500">
         {t("app.version")}
       </div>

@@ -225,6 +225,27 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             <code className="text-zinc-500">/^receipt_\d+/</code>
           </p>
         </div>
+
+        {/* Match subdirectories toggle */}
+        <div className="flex items-center gap-2 mt-2">
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={draft.match_subdirectories}
+              onChange={(e) =>
+                setDraft({ ...draft, match_subdirectories: e.target.checked })
+              }
+              className="sr-only peer"
+            />
+            <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:bg-purple-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+          </label>
+          <span className="text-xs text-zinc-400">{t("rules.matchSubdirs")}</span>
+          {draft.match_subdirectories && (
+            <span className="text-[11px] text-purple-400/70 ml-1">
+              {t("rules.matchSubdirsHint")}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Live test */}

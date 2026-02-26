@@ -1,7 +1,7 @@
 {
   "app": {
     "name": "Download Organizer",
-    "version": "v0.1.0",
+    "version": "v1.0.0",
     "loading": "Loading..."
   },
   "nav": {
@@ -47,6 +47,7 @@
     "disable": "Disable",
     "enable": "Enable",
     "remove": "Remove",
+    "removeConfirm": "Remove \"{{path}}\" from watched folders? Your rules for this folder will be lost.",
     "selectFolder": "Select folder to watch",
     "folderAdded": "Folder added",
     "failedToAdd": "Failed to add folder",
@@ -54,7 +55,14 @@
     "whitelistDesc": "Files matching these patterns will never be processed by any rule in this folder.",
     "whitelistCount": "{{count}} whitelisted",
     "whitelistPlaceholder": "e.g. *.important, keepme.txt",
-    "whitelistAdd": "Add"
+    "whitelistAdd": "Add",
+    "assignToOtherFolders": "Copy to other folders",
+    "assignRuleTitle": "Copy Rule to Folders",
+    "assignRuleDesc": "Copy \"{{name}}\" to the selected folders.",
+    "assignRuleCopy": "Copy",
+    "assignRuleDone": "Copied successfully!",
+    "watchSubdirs": "Include subfolders",
+    "watchSubdirsDesc": "Also watch files in subdirectories"
   },
   "rules": {
     "title": "Rules",
@@ -98,6 +106,11 @@
     "conditionHelpGrouping": "grouping",
     "conditionHelpRegex": "regex (wrap pattern in",
     "conditionHelpRegexSlashes": "slashes for regular expressions)",
+    "subfoldersTag": "Subfolders",
+    "subfoldersOn": "Subfolder matching ON — click to disable",
+    "subfoldersOff": "Subfolder matching OFF — click to enable",
+    "matchSubdirs": "Match subfolders",
+    "matchSubdirsHint": "Patterns match relative path, e.g. subfolder/*.pdf",
     "conditionHelpExamples": "Examples:",
     "matchAll": "Match all files",
     "moveTo": "Move to",
@@ -116,7 +129,14 @@
     "importRulesSelected": "{{count}} selected",
     "importRulesCopy": "Copy Selected",
     "importRulesSuccess": "{{count}} rule(s) copied successfully!",
-    "importRulesFrom": "From:"
+    "importRulesFrom": "From:",
+    "neverRun": "Never run",
+    "justNow": "Just now",
+    "minutesAgo": "{{count}}m ago",
+    "hoursAgo": "{{count}}h ago",
+    "daysAgo": "{{count}}d ago",
+    "weeklyRuns": "{{count}}",
+    "whitelistSkips": "Skips: {{patterns}}"
   },
   "activity": {
     "title": "Activity Log",
@@ -209,5 +229,14 @@
     "confirm": "Confirm",
     "delete": "Delete",
     "required": "required"
+  },
+  "update": {
+    "available": "Update v{{version}} available",
+    "install": "Download & Install",
+    "downloading": "Downloading… {{progress}}%",
+    "ready": "Update installed!",
+    "readyDesc": "Restart the app to apply the update.",
+    "upToDate": "You're up to date.",
+    "error": "Update check failed"
   }
 }

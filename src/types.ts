@@ -26,6 +26,8 @@ export interface WatchedFolder {
   rules: Rule[];
   /** Glob patterns for files that should never be processed in this folder */
   whitelist: string[];
+  /** Whether to watch subdirectories recursively */
+  watch_subdirectories: boolean;
 }
 
 // ── Composable Rule System ──────────────────────────────────
@@ -41,6 +43,8 @@ export interface Rule {
   action: Action;
   /** Glob patterns for files this rule should skip. Move destination is auto-whitelisted. */
   whitelist: string[];
+  /** When true, conditions match against relative path from watched folder instead of filename only */
+  match_subdirectories: boolean;
 }
 
 /**
@@ -111,6 +115,12 @@ export interface RuleMetadata {
   folder_id: string;
   created_at: string;
   last_triggered_at: string | null;
+}
+
+export interface RuleExecutionStats {
+  rule_name: string;
+  last_executed: string | null;
+  executions_this_week: number;
 }
 
 export interface ScheduledDeletion {

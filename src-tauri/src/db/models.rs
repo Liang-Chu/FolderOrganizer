@@ -45,6 +45,13 @@ pub struct RuleMetadata {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct RuleExecutionStats {
+    pub rule_name: String,
+    pub last_executed: Option<String>,
+    pub executions_this_week: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScheduledDeletion {
     pub id: String,
     pub file_path: String,

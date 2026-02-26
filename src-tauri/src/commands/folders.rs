@@ -32,6 +32,7 @@ pub fn add_watched_folder(state: State<AppState>, path: String) -> Result<Watche
         enabled: true,
         rules: Vec::new(),
         whitelist: Vec::new(),
+        watch_subdirectories: false,
     };
 
     config.folders.push(folder.clone());
@@ -57,6 +58,20 @@ pub fn toggle_watched_folder(
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     if let Some(folder) = config.folders.iter_mut().find(|f| f.id == folder_id) {
         folder.enabled = enabled;
+    }
+    config::save_config(&config)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn toggle_watch_subdirectories(
+    state: State<AppState>,
+    folder_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+    if let Some(folder) = config.folders.iter_mut().find(|f| f.id == folder_id) {
+        folder.watch_subdirectories = enabled;
     }
     config::save_config(&config)?;
     Ok(())

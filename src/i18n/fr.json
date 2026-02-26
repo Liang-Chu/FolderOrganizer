@@ -47,6 +47,7 @@
     "disable": "Désactiver",
     "enable": "Activer",
     "remove": "Supprimer",
+    "removeConfirm": "Supprimer \"{{path}}\" des dossiers surveillés ? Les règles de ce dossier seront perdues.",
     "selectFolder": "Sélectionner un dossier à surveiller",
     "folderAdded": "Dossier ajouté",
     "failedToAdd": "Échec de l'ajout du dossier",
@@ -54,7 +55,14 @@
     "whitelistDesc": "Les fichiers correspondant à ces motifs ne seront jamais traités par les règles de ce dossier.",
     "whitelistCount": "{{count}} en liste blanche",
     "whitelistPlaceholder": "ex. *.important, garder.txt",
-    "whitelistAdd": "Ajouter"
+    "whitelistAdd": "Ajouter",
+    "assignToOtherFolders": "Copier vers d'autres dossiers",
+    "assignRuleTitle": "Copier la règle vers des dossiers",
+    "assignRuleDesc": "Copier \"{{name}}\" vers les dossiers sélectionnés.",
+    "assignRuleCopy": "Copier",
+    "assignRuleDone": "Copié avec succès !",
+    "watchSubdirs": "Sous-dossiers",
+    "watchSubdirsDesc": "Surveiller aussi les fichiers dans les sous-dossiers"
   },
   "rules": {
     "title": "Règles",
@@ -98,6 +106,11 @@
     "conditionHelpGrouping": "groupement",
     "conditionHelpRegex": "regex (encadrer le motif avec des",
     "conditionHelpRegexSlashes": "barres obliques pour les expressions régulières)",
+    "subfoldersTag": "Sous-dossiers",
+    "subfoldersOn": "Correspondance sous-dossiers ACTIV\u00c9E \u2014 cliquer pour d\u00e9sactiver",
+    "subfoldersOff": "Correspondance sous-dossiers D\u00c9SACTIV\u00c9E \u2014 cliquer pour activer",
+    "matchSubdirs": "Correspondre aux sous-dossiers",
+    "matchSubdirsHint": "Le pattern correspond au chemin relatif, ex. sousdossier/*.pdf",
     "conditionHelpExamples": "Exemples :",
     "matchAll": "Tous les fichiers",
     "moveTo": "Déplacer vers",
@@ -116,7 +129,14 @@
     "importRulesSelected": "{{count}} sélectionné(s)",
     "importRulesCopy": "Copier la sélection",
     "importRulesSuccess": "{{count}} règle(s) copiée(s) avec succès !",
-    "importRulesFrom": "De :"
+    "importRulesFrom": "De :",
+    "neverRun": "Jamais exécutée",
+    "justNow": "À l'instant",
+    "minutesAgo": "il y a {{count}}m",
+    "hoursAgo": "il y a {{count}}h",
+    "daysAgo": "il y a {{count}}j",
+    "weeklyRuns": "{{count}}",
+    "whitelistSkips": "Ignore : {{patterns}}"
   },
   "activity": {
     "title": "Journal d'activité",
@@ -209,5 +229,14 @@
     "confirm": "Confirmer",
     "delete": "Supprimer",
     "required": "requis"
+  },
+  "update": {
+    "available": "Mise à jour v{{version}} disponible",
+    "install": "Télécharger et installer",
+    "downloading": "Téléchargement… {{progress}}%",
+    "ready": "Mise à jour installée !",
+    "readyDesc": "Redémarrez l'application pour appliquer la mise à jour.",
+    "upToDate": "Vous êtes à jour.",
+    "error": "Échec de la vérification"
   }
 }

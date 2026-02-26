@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::db::{ActivityLogEntry, FileIndexEntry, ScheduledDeletion, UndoEntry};
+use crate::db::{ActivityLogEntry, FileIndexEntry, RuleExecutionStats, ScheduledDeletion, UndoEntry};
 use crate::scheduler;
 use super::AppState;
 
@@ -84,4 +84,21 @@ pub fn cancel_scheduled_deletion(
 #[tauri::command]
 pub fn run_deletions(state: State<AppState>) -> Result<u32, String> {
     Ok(scheduler::process_due_deletions(&state.db))
+}
+
+/// Get execution stats (last run + weekly count) for each rule in a folder.
+#[tauri::command]
+pub fn get_rule_execution_stats(
+    state: State<AppState>,
+    folder_id: String,
+) -> Result<Vec<RuleExecutionStats>, String> {
+    let since = chrono::Utc::now()
+        .checked_sub_signed(chrono::Duration::days(7))
+        .unwrap_or(chrono::Utc::now())
+        .format("%Y-%m-%d %H:%M:%S")
+        .to_string();
+    state
+        .db
+        .get_rule_execution_stats(&folder_id, &since)
+        .map_err(|e| e.to_string())
 }

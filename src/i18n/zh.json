@@ -47,6 +47,7 @@
     "disable": "停用",
     "enable": "启用",
     "remove": "移除",
+    "removeConfirm": "从监控列表中移除 \"{{path}}\"？该文件夹的规则将会丢失。",
     "selectFolder": "选择要监控的文件夹",
     "folderAdded": "文件夹已添加",
     "failedToAdd": "添加文件夹失败",
@@ -54,7 +55,14 @@
     "whitelistDesc": "匹配这些模式的文件将不会被此文件夹中的任何规则处理。",
     "whitelistCount": "{{count}} 个白名单",
     "whitelistPlaceholder": "例如 *.important, keepme.txt",
-    "whitelistAdd": "添加"
+    "whitelistAdd": "添加",
+    "assignToOtherFolders": "复制到其他文件夹",
+    "assignRuleTitle": "复制规则到文件夹",
+    "assignRuleDesc": "将 \"{{name}}\" 复制到选定的文件夹。",
+    "assignRuleCopy": "复制",
+    "assignRuleDone": "复制成功！",
+    "watchSubdirs": "包含子目录",
+    "watchSubdirsDesc": "同时监视子目录中的文件"
   },
   "rules": {
     "title": "规则",
@@ -98,6 +106,11 @@
     "conditionHelpGrouping": "分组",
     "conditionHelpRegex": "正则表达式（用",
     "conditionHelpRegexSlashes": "斜杠包裹正则表达式）",
+    "subfoldersTag": "子目录",
+    "subfoldersOn": "子目录匹配已开启 — 点击关闭",
+    "subfoldersOff": "子目录匹配已关闭 — 点击开启",
+    "matchSubdirs": "匹配子目录",
+    "matchSubdirsHint": "模式匹配相对路径，例如 subfolder/*.pdf",
     "conditionHelpExamples": "示例：",
     "matchAll": "匹配所有文件",
     "moveTo": "移动到",
@@ -116,7 +129,14 @@
     "importRulesSelected": "已选择 {{count}} 个",
     "importRulesCopy": "复制选中项",
     "importRulesSuccess": "成功复制 {{count}} 条规则！",
-    "importRulesFrom": "来自："
+    "importRulesFrom": "来自：",
+    "neverRun": "从未运行",
+    "justNow": "刚刚",
+    "minutesAgo": "{{count}}分钟前",
+    "hoursAgo": "{{count}}小时前",
+    "daysAgo": "{{count}}天前",
+    "weeklyRuns": "{{count}}",
+    "whitelistSkips": "跳过：{{patterns}}"
   },
   "activity": {
     "title": "活动记录",
@@ -209,5 +229,14 @@
     "confirm": "确认",
     "delete": "删除",
     "required": "必填"
+  },
+  "update": {
+    "available": "发现新版本 v{{version}}",
+    "install": "下载并安装",
+    "downloading": "下载中… {{progress}}%",
+    "ready": "更新已安装！",
+    "readyDesc": "重启应用以应用更新。",
+    "upToDate": "已是最新版本。",
+    "error": "检查更新失败"
   }
 }

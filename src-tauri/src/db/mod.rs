@@ -104,6 +104,6 @@ mod undo;
 // ── Re-exports ──────────────────────────────────────────────
 
 pub use models::{
-    ActivityLogEntry, DbStats, FileIndexEntry, RuleMetadata, ScheduledDeletion, TableQueryResult,
-    UndoEntry,
+    ActivityLogEntry, DbStats, FileIndexEntry, RuleExecutionStats, RuleMetadata,
+    ScheduledDeletion, TableQueryResult, UndoEntry,
 };

@@ -52,13 +52,22 @@ impl FileWatcher {
 
         for folder in &config.folders {
             if folder.enabled && folder.path.exists() {
+                // Auto-derive recursive mode: if any rule uses match_subdirectories,
+                // the OS watcher must also recurse so those files are detected.
+                let needs_recursive = folder.watch_subdirectories
+                    || folder.rules.iter().any(|r| r.match_subdirectories);
+                let mode = if needs_recursive {
+                    RecursiveMode::Recursive
+                } else {
+                    RecursiveMode::NonRecursive
+                };
                 debouncer
                     .watcher()
-                    .watch(&folder.path, RecursiveMode::NonRecursive)
+                    .watch(&folder.path, mode)
                     .map_err(|e| {
                         format!("Failed to watch {}: {}", folder.path.display(), e)
                     })?;
-                log::info!("Watching: {}", folder.path.display());
+                log::info!("Watching{}: {}", if needs_recursive { " (recursive)" } else { "" }, folder.path.display());
             }
         }
 
@@ -84,10 +93,16 @@ fn handle_file_event(
     // Find which watched folder this file belongs to
     let folder = config.folders.iter().find(|f| {
         f.enabled
-            && file_path
-                .parent()
-                .map(|p| p == f.path)
-                .unwrap_or(false)
+            && if f.watch_subdirectories {
+                // Recursive: file can be anywhere under the watched folder
+                file_path.starts_with(&f.path)
+            } else {
+                // Non-recursive: file must be a direct child
+                file_path
+                    .parent()
+                    .map(|p| p == f.path)
+                    .unwrap_or(false)
+            }
     });
 
     if let Some(folder) = folder {

@@ -47,7 +47,9 @@ pub struct AppSettings {
 }
 
 fn default_sort_root() -> PathBuf {
-    PathBuf::from(r"D:\sorted")
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("Sorted")
 }
 
 fn default_max_storage_mb() -> u32 {
@@ -82,6 +84,9 @@ pub struct WatchedFolder {
     /// Glob patterns for files that should never be processed in this folder
     #[serde(default)]
     pub whitelist: Vec<String>,
+    /// Whether to watch subdirectories recursively (default: false = top-level only)
+    #[serde(default)]
+    pub watch_subdirectories: bool,
 }
 
 // ── Composable Rule System ──────────────────────────────────
@@ -106,6 +111,10 @@ pub struct Rule {
     /// For Move rules, the destination folder is auto-whitelisted.
     #[serde(default)]
     pub whitelist: Vec<String>,
+    /// When true, condition patterns match against the relative path from the watched folder
+    /// (e.g. `subdir/*.pdf`) instead of just the filename. Default: false (filename only).
+    #[serde(default)]
+    pub match_subdirectories: bool,
 }
 
 impl Rule {

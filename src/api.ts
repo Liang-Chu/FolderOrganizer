@@ -43,6 +43,9 @@ export const removeWatchedFolder = (folderId: string) =>
 export const toggleWatchedFolder = (folderId: string, enabled: boolean) =>
   invoke<void>("toggle_watched_folder", { folderId, enabled });
 
+export const toggleWatchSubdirectories = (folderId: string, enabled: boolean) =>
+  invoke<void>("toggle_watch_subdirectories", { folderId, enabled });
+
 export const getFolderWhitelist = (folderId: string) =>
   invoke<string[]>("get_folder_whitelist", { folderId });
 
@@ -145,6 +148,9 @@ export const openInExplorer = (path: string) =>
 /** Get metadata (created_at, last_triggered_at) for all rules in a folder. */
 export const getRuleMetadata = (folderId: string) =>
   invoke<RuleMetadata[]>("get_rule_metadata", { folderId });
+
+export const getRuleExecutionStats = (folderId: string) =>
+  invoke<import("./types").RuleExecutionStats[]>("get_rule_execution_stats", { folderId });
 
 // ── Database Viewer ─────────────────────────────────────────
 
