@@ -18,7 +18,7 @@ export function UpdateChecker() {
   const { t } = useTranslation();
   const [state, setState] = useState<UpdateState>({ status: "idle" });
   const [dismissed, setDismissed] = useState(false);
-  const [updateMode, setUpdateMode] = useState<'off' | 'notify' | 'auto'>('auto');
+  const [updateMode, setUpdateMode] = useState<'off' | 'notify' | 'auto'>('notify');
   const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
 
   useEffect(() => {

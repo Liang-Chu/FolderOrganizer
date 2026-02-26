@@ -64,7 +64,7 @@ fn default_deletion_time_hour() -> u32 {
 }
 
 fn default_update_mode() -> String {
-    "auto".to_string()
+    "notify".to_string()
 }
 
 impl Default for AppSettings {
