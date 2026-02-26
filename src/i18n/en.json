@@ -199,6 +199,8 @@
     "maxStorageDesc": "Maximum database size in MB (0 = unlimited, default 2048 = 2 GB)",
     "deletionTime": "Deletion Time",
     "deletionTimeDesc": "Hour of day (0-23) when scheduled file deletions automatically run",
+    "autoUpdate": "Auto-update",
+    "autoUpdateDesc": "Automatically check for and notify about new versions",
     "dataStorage": "Data Storage",
     "openDataExplorer": "Open Data Explorer",
     "database": "Database",

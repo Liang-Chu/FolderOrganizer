@@ -141,6 +141,15 @@ pub fn run() {
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&tray_menu)
                 .tooltip("Download Organizer")
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click { .. } = event {
+                        if let Some(w) = tray.app_handle().get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                        }
+                    }
+                })
                 .on_menu_event(|app_handle, event| {
                     match event.id.as_ref() {
                         "show" => {

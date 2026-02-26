@@ -17,6 +17,8 @@ export interface AppSettings {
   default_sort_root: string;
   /** Hour of day (0-23) when scheduled deletions auto-run (default: 3 = 3 AM) */
   deletion_time_hour: number;
+  /** Automatically check and install updates (default: true) */
+  auto_update: boolean;
 }
 
 export interface WatchedFolder {

@@ -11,21 +11,9 @@ impl Database {
         std::fs::metadata(db_path).map(|m| m.len()).unwrap_or(0)
     }
 
-    /// Get the size of the trash_staging directory in bytes.
+    /// Get the size of the trash_staging directory in bytes (legacy, returns 0).
     pub fn get_trash_staging_size(&self) -> u64 {
-        let staging_dir = app_data_dir().join("trash_staging");
-        if !staging_dir.exists() {
-            return 0;
-        }
-        std::fs::read_dir(&staging_dir)
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .filter_map(|e| e.metadata().ok())
-                    .map(|m| m.len())
-                    .sum()
-            })
-            .unwrap_or(0)
+        0
     }
 
     /// Get row counts for all tables.

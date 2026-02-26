@@ -75,7 +75,7 @@ pub fn process_due_deletions(db: &Database) -> u32 {
                         &now_str,
                         if success { "success" } else { "error" },
                         if success {
-                            Some("File moved to trash staging (recoverable for 7 days)")
+                            Some("File sent to Recycle Bin")
                         } else {
                             Some("Failed to delete file")
                         },
@@ -143,30 +143,17 @@ pub fn scan_existing_files(
     log::info!("Folder scan completed");
 }
 
-/// Safe delete: move file to a staging dir so it can be undone.
+/// Safe delete: send file to the OS recycle bin.
 /// Returns true on success.
 fn safe_delete(file_path: &Path, db: &Database, now_str: &str) -> bool {
-    let staging_dir = crate::config::app_data_dir().join("trash_staging");
-    if fs::create_dir_all(&staging_dir).is_err() {
-        return false;
-    }
-
-    let file_name = file_path
-        .file_name()
-        .unwrap_or_default()
-        .to_string_lossy()
-        .to_string();
-    let staged_name = format!("{}_{}", Uuid::new_v4(), file_name);
-    let staged_path = staging_dir.join(&staged_name);
-
-    match fs::rename(file_path, &staged_path) {
+    match trash::delete(file_path) {
         Ok(_) => {
-            // Undo expires in 7 days
+            // Undo expires in 7 days (user can restore from Recycle Bin)
             let expires = Utc::now() + chrono::Duration::days(7);
             let _ = db.insert_undo(
                 &Uuid::new_v4().to_string(),
                 &file_path.to_string_lossy(),
-                Some(&staged_path.to_string_lossy()),
+                None, // no staged path — it's in the OS recycle bin
                 "auto_delete",
                 now_str,
                 &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
@@ -174,7 +161,7 @@ fn safe_delete(file_path: &Path, db: &Database, now_str: &str) -> bool {
             true
         }
         Err(e) => {
-            log::error!("Failed to stage-delete {}: {}", file_path.display(), e);
+            log::error!("Failed to recycle {}: {}", file_path.display(), e);
             false
         }
     }

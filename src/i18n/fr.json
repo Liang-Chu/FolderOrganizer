@@ -199,6 +199,8 @@
     "maxStorageDesc": "Taille maximale de la base en Mo (0 = illimité, défaut 2048 = 2 Go)",
     "deletionTime": "Heure de suppression",
     "deletionTimeDesc": "Heure du jour (0-23) à laquelle les suppressions programmées s'exécutent automatiquement",
+    "autoUpdate": "Mise à jour automatique",
+    "autoUpdateDesc": "Vérifier et notifier automatiquement les nouvelles versions",
     "dataStorage": "Stockage des données",
     "openDataExplorer": "Ouvrir l'explorateur de données",
     "database": "Base de données",

@@ -316,6 +316,29 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Auto-update toggle */}
+      <div className="bg-zinc-900 rounded-xl border border-zinc-800">
+        <div className="px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t("settings.autoUpdate")}</p>
+            <p className="text-xs text-zinc-500">
+              {t("settings.autoUpdateDesc")}
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.auto_update}
+              onChange={(e) =>
+                setSettings({ ...settings, auto_update: e.target.checked })
+              }
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
+          </label>
+        </div>
+      </div>
+
       {/* Import / Export */}
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 px-5 py-4 space-y-3">
         <div>

@@ -2,7 +2,8 @@
 name = "download-organizer"
 version = "1.0.0"
 description = "Lightweight desktop app to auto-organize your downloads"
-authors = ["you"]
+authors = ["Liang Chu"]
+license = "MIT"
 edition = "2021"
 
 [lib]
@@ -30,4 +31,5 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1", features = ["v4"] }
 tauri-plugin-autostart = "2"
 tauri-plugin-updater = "2.10.0"
+trash = "5.2.5"
 

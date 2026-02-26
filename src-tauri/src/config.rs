@@ -44,6 +44,9 @@ pub struct AppSettings {
     /// Hour of the day (0-23) when scheduled deletions run automatically (default: 3 = 3 AM)
     #[serde(default = "default_deletion_time_hour")]
     pub deletion_time_hour: u32,
+    /// Automatically check and install updates
+    #[serde(default = "default_auto_update")]
+    pub auto_update: bool,
 }
 
 fn default_sort_root() -> PathBuf {
@@ -60,6 +63,10 @@ fn default_deletion_time_hour() -> u32 {
     3
 }
 
+fn default_auto_update() -> bool {
+    true
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -71,6 +78,7 @@ impl Default for AppSettings {
             max_storage_mb: default_max_storage_mb(),
             default_sort_root: default_sort_root(),
             deletion_time_hour: default_deletion_time_hour(),
+            auto_update: default_auto_update(),
         }
     }
 }

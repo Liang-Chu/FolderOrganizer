@@ -28,3 +28,11 @@ target/
 *.njsproj
 *.sln
 *.sw?
+release.ps1
+# Signing keys
+~/.tauri/
+*.key
+*.key.pub
+
+# Local release script
+release.ps1

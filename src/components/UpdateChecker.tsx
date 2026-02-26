@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { Download, X, RefreshCw, CheckCircle } from "lucide-react";
+import * as api from "../api";
 
 type UpdateState =
   | { status: "idle" }
@@ -16,8 +17,17 @@ export function UpdateChecker() {
   const { t } = useTranslation();
   const [state, setState] = useState<UpdateState>({ status: "idle" });
   const [dismissed, setDismissed] = useState(false);
+  const [autoUpdate, setAutoUpdate] = useState(true);
 
   useEffect(() => {
+    // Load the auto_update setting
+    api.getConfig().then((cfg) => {
+      setAutoUpdate(cfg.settings.auto_update);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!autoUpdate) return;
     // Check for updates 5 seconds after mount, then every 4 hours
     const timer = setTimeout(() => checkForUpdate(), 5000);
     const interval = setInterval(() => checkForUpdate(), 4 * 60 * 60 * 1000);
@@ -25,7 +35,7 @@ export function UpdateChecker() {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, []);
+  }, [autoUpdate]);
 
   const checkForUpdate = async () => {
     try {
