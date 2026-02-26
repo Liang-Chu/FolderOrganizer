@@ -1,7 +1,9 @@
 import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { isPermissionGranted, requestPermission, sendNotification, registerActionTypes, onAction } from "@tauri-apps/plugin-notification";
+import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { listen } from "@tauri-apps/api/event";
+import { currentMonitor } from "@tauri-apps/api/window";
 import { Download, X, RefreshCw, CheckCircle } from "lucide-react";
 import * as api from "../api";
 
@@ -22,52 +24,23 @@ export function UpdateChecker() {
   const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
   const pendingUpdateRef = useRef<Update | null>(null);
 
-  // Register notification action types and handler once
+  // Listen for actions from the custom notification popup
   useEffect(() => {
-    registerActionTypes([{
-      id: "update-actions",
-      actions: [
-        { id: "update-now", title: "Update Now" },
-        { id: "remind-later", title: "Remind Later" },
-        { id: "skip", title: "Skip" },
-      ],
-    }]).catch(() => {});
-
-    const unlistenPromise = onAction((notification) => {
-      const actionId = (notification as any).actionId ?? (notification as any).action;
-      if (actionId === "update-now" && pendingUpdateRef.current) {
-        // Trigger install from notification click
+    const unlisten = listen<{ action: string; version: string }>("update-notification-action", async (event) => {
+      const { action } = event.payload;
+      if (action === "update") {
         const update = pendingUpdateRef.current;
-        setState({ status: "downloading", progress: 0 });
-        let downloaded = 0;
-        let contentLength = 0;
-        update.downloadAndInstall((event) => {
-          switch (event.event) {
-            case "Started":
-              contentLength = event.data.contentLength ?? 0;
-              break;
-            case "Progress":
-              downloaded += event.data.chunkLength;
-              setState({
-                status: "downloading",
-                progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
-              });
-              break;
-            case "Finished":
-              setState({ status: "ready" });
-              break;
-          }
-        }).then(() => setState({ status: "ready" }))
-          .catch(() => setState({ status: "idle" }));
-      } else if (actionId === "remind-later") {
+        if (update) {
+          installUpdateFromRef(update);
+        }
+      } else if (action === "later") {
         setSnoozedUntil(Date.now() + 24 * 60 * 60 * 1000);
         setDismissed(true);
-      } else if (actionId === "skip") {
+      } else if (action === "skip") {
         setDismissed(true);
       }
     });
-
-    return () => { unlistenPromise.then((fn) => fn.unregister()); };
+    return () => { unlisten.then((fn) => fn()); };
   }, []);
 
   useEffect(() => {
@@ -86,23 +59,66 @@ export function UpdateChecker() {
     };
   }, [updateMode]);
 
-  const sendSystemNotification = async (version: string, update: Update) => {
+  const showNotificationPopup = async (version: string) => {
     try {
-      let granted = await isPermissionGranted();
-      if (!granted) {
-        const permission = await requestPermission();
-        granted = permission === "granted";
-      }
-      if (granted) {
-        pendingUpdateRef.current = update;
-        sendNotification({
-          title: "Folder Organizer",
-          body: t("update.notifyBody", { version }),
-          actionTypeId: "update-actions",
-        });
-      }
+      // Close existing notification popup if any
+      const existing = await WebviewWindow.getByLabel("update-notification");
+      if (existing) await existing.close();
+
+      // Get screen size to position at bottom-right
+      const monitor = await currentMonitor();
+      const screenW = monitor?.size?.width ?? 1920;
+      const screenH = monitor?.size?.height ?? 1080;
+      const scale = monitor?.scaleFactor ?? 1;
+      const popupW = 340;
+      const popupH = 105;
+      const margin = 16;
+
+      new WebviewWindow("update-notification", {
+        url: `notification.html?v=${encodeURIComponent(version)}`,
+        title: "Update Available",
+        width: popupW,
+        height: popupH,
+        x: Math.round(screenW / scale) - popupW - margin,
+        y: Math.round(screenH / scale) - popupH - margin - 48,
+        resizable: false,
+        decorations: false,
+        alwaysOnTop: true,
+        visible: true,
+        focus: true,
+        skipTaskbar: true,
+      });
     } catch (err) {
-      console.error("Notification error:", err);
+      console.error("Notification popup error:", err);
+    }
+  };
+
+  const installUpdateFromRef = async (update: Update) => {
+    try {
+      setState({ status: "downloading", progress: 0 });
+      setDismissed(false);
+      let downloaded = 0;
+      let contentLength = 0;
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case "Started":
+            contentLength = event.data.contentLength ?? 0;
+            break;
+          case "Progress":
+            downloaded += event.data.chunkLength;
+            setState({
+              status: "downloading",
+              progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
+            });
+            break;
+          case "Finished":
+            setState({ status: "ready" });
+            break;
+        }
+      });
+      setState({ status: "ready" });
+    } catch (err) {
+      setState({ status: "error", message: String(err) });
     }
   };
 
@@ -135,10 +151,11 @@ export function UpdateChecker() {
           });
           setState({ status: "ready" });
         } else {
-          // Notify mode: show system notification + in-app banner
+          // Notify mode: show custom popup notification + in-app banner
           const now = Date.now();
           if (now >= snoozedUntil) {
-            await sendSystemNotification(update.version, update);
+            pendingUpdateRef.current = update;
+            await showNotificationPopup(update.version);
             setState({ status: "available", update });
             setDismissed(false);
           }
