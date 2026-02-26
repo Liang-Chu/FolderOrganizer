@@ -202,9 +202,14 @@
     "autoUpdateDesc": "自动检查并通知新版本",
     "updateMode": "更新模式",
     "updateModeDesc": "控制应用如何处理更新",
+    "updateModeDesc_off": "版本冻结 — 不执行任何更新检查",
+    "updateModeDesc_notify": "有新版本时会收到通知提醒",
+    "updateModeDesc_auto": "更新会在后台静默下载并安装",
     "updateMode_off": "冻结",
     "updateMode_notify": "通知",
-    "updateMode_auto": "自动",    "dataStorage": "数据存储",
+    "updateMode_auto": "自动",
+    "checkForUpdates": "检查更新",
+    "dataStorage": "数据存储",
     "openDataExplorer": "打开数据浏览器",
     "database": "数据库",
     "trashStaging": "回收站暂存",
@@ -242,6 +247,8 @@
     "ready": "更新已安装！",
     "readyDesc": "重启应用以应用更新。",
     "upToDate": "已是最新版本。",
-    "error": "检查更新失败"
+    "error": "检查更新失败",
+    "remindLater": "稍后提醒",
+    "notifyBody": "Folder Organizer v{{version}} 可用。打开应用进行更新。"
   }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
 import { Download, X, RefreshCw, CheckCircle } from "lucide-react";
 import * as api from "../api";
 
@@ -18,9 +19,9 @@ export function UpdateChecker() {
   const [state, setState] = useState<UpdateState>({ status: "idle" });
   const [dismissed, setDismissed] = useState(false);
   const [updateMode, setUpdateMode] = useState<'off' | 'notify' | 'auto'>('auto');
+  const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
 
   useEffect(() => {
-    // Load the update_mode setting
     api.getConfig().then((cfg) => {
       setUpdateMode(cfg.settings.update_mode);
     });
@@ -28,7 +29,6 @@ export function UpdateChecker() {
 
   useEffect(() => {
     if (updateMode === 'off') return;
-    // Check for updates 5 seconds after mount, then every 4 hours
     const timer = setTimeout(() => checkForUpdate(), 5000);
     const interval = setInterval(() => checkForUpdate(), 4 * 60 * 60 * 1000);
     return () => {
@@ -37,13 +37,31 @@ export function UpdateChecker() {
     };
   }, [updateMode]);
 
+  const sendSystemNotification = async (version: string) => {
+    try {
+      let granted = await isPermissionGranted();
+      if (!granted) {
+        const permission = await requestPermission();
+        granted = permission === "granted";
+      }
+      if (granted) {
+        sendNotification({
+          title: "Folder Organizer",
+          body: t("update.notifyBody", { version }),
+        });
+      }
+    } catch (err) {
+      console.error("Notification error:", err);
+    }
+  };
+
   const checkForUpdate = async () => {
     try {
       setState({ status: "checking" });
       const update = await check();
       if (update) {
         if (updateMode === 'auto') {
-          // Silent auto-update: download and install immediately
+          // Silent auto-update
           setState({ status: "downloading", progress: 0 });
           let downloaded = 0;
           let contentLength = 0;
@@ -66,18 +84,21 @@ export function UpdateChecker() {
           });
           setState({ status: "ready" });
         } else {
-          // Notify mode: just show the update banner
-          setState({ status: "available", update });
-          setDismissed(false);
+          // Notify mode: show system notification + in-app banner
+          const now = Date.now();
+          if (now >= snoozedUntil) {
+            await sendSystemNotification(update.version);
+            setState({ status: "available", update });
+            setDismissed(false);
+          }
         }
       } else {
         setState({ status: "upToDate" });
-        // Hide the "up to date" message after 3 seconds
         setTimeout(() => setState({ status: "idle" }), 3000);
       }
     } catch (err) {
       console.error("Update check failed:", err);
-      setState({ status: "idle" }); // Silently fail on check errors
+      setState({ status: "idle" });
     }
   };
 
@@ -111,13 +132,17 @@ export function UpdateChecker() {
     }
   };
 
+  const handleRemindLater = () => {
+    // Snooze for 24 hours
+    setSnoozedUntil(Date.now() + 24 * 60 * 60 * 1000);
+    setDismissed(true);
+  };
+
   // Nothing to show
   if (state.status === "idle" || dismissed) return null;
-
-  // Checking spinner (only flash briefly)
   if (state.status === "checking") return null;
 
-  // Up to date (brief flash)
+  // Up to date
   if (state.status === "upToDate") {
     return (
       <div className="mx-4 mb-3 px-3 py-2 bg-green-900/20 border border-green-800/40 rounded-lg flex items-center gap-2 text-xs text-green-400">
@@ -127,7 +152,7 @@ export function UpdateChecker() {
     );
   }
 
-  // Update available
+  // Update available (notify mode)
   if (state.status === "available") {
     return (
       <div className="mx-4 mb-3 px-3 py-2.5 bg-blue-900/20 border border-blue-700/40 rounded-lg text-xs">
@@ -145,12 +170,20 @@ export function UpdateChecker() {
             <X size={12} />
           </button>
         </div>
-        <button
-          onClick={installUpdate}
-          className="mt-2 w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-md text-xs font-medium transition-colors"
-        >
-          {t("update.install")}
-        </button>
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={installUpdate}
+            className="flex-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded-md text-xs font-medium transition-colors"
+          >
+            {t("update.install")}
+          </button>
+          <button
+            onClick={handleRemindLater}
+            className="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 rounded-md text-xs font-medium transition-colors text-zinc-300"
+          >
+            {t("update.remindLater")}
+          </button>
+        </div>
       </div>
     );
   }

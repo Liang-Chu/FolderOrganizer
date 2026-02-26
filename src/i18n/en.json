@@ -203,9 +203,13 @@
     "autoUpdateDesc": "Automatically check for and notify about new versions",
     "updateMode": "Update Mode",
     "updateModeDesc": "Control how the app handles updates",
+    "updateModeDesc_off": "Version frozen — no update checks will be performed",
+    "updateModeDesc_notify": "You'll get a notification when a new version is available",
+    "updateModeDesc_auto": "Updates are downloaded and installed silently in the background",
     "updateMode_off": "Frozen",
     "updateMode_notify": "Notify",
     "updateMode_auto": "Auto",
+    "checkForUpdates": "Check for updates",
     "dataStorage": "Data Storage",
     "openDataExplorer": "Open Data Explorer",
     "database": "Database",
@@ -244,6 +248,8 @@
     "ready": "Update installed!",
     "readyDesc": "Restart the app to apply the update.",
     "upToDate": "You're up to date.",
-    "error": "Update check failed"
+    "error": "Update check failed",
+    "remindLater": "Later",
+    "notifyBody": "Folder Organizer v{{version}} is available. Open the app to update."
   }
 }

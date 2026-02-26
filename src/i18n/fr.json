@@ -203,9 +203,13 @@
     "autoUpdateDesc": "Vérifier et notifier automatiquement les nouvelles versions",
     "updateMode": "Mode de mise à jour",
     "updateModeDesc": "Contrôler les mises à jour de l'application",
+    "updateModeDesc_off": "Version gelée — aucune vérification ne sera effectuée",
+    "updateModeDesc_notify": "Vous recevrez une notification quand une nouvelle version est disponible",
+    "updateModeDesc_auto": "Les mises à jour sont téléchargées et installées silencieusement",
     "updateMode_off": "Gelé",
     "updateMode_notify": "Notifier",
     "updateMode_auto": "Auto",
+    "checkForUpdates": "Vérifier les mises à jour",
     "dataStorage": "Stockage des données",
     "openDataExplorer": "Ouvrir l'explorateur de données",
     "database": "Base de données",
@@ -244,6 +248,8 @@
     "ready": "Mise à jour installée !",
     "readyDesc": "Redémarrez l'application pour appliquer la mise à jour.",
     "upToDate": "Vous êtes à jour.",
-    "error": "Échec de la vérification"
+    "error": "Échec de la vérification",
+    "remindLater": "Plus tard",
+    "notifyBody": "Folder Organizer v{{version}} est disponible. Ouvrez l'application pour mettre à jour."
   }
 }

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, FolderOpen, Database, ExternalLink, Download, Upload } from "lucide-react";
+import { Save, FolderOpen, Database, ExternalLink, Download, Upload, RefreshCw } from "lucide-react";
 import { open, save, message } from "@tauri-apps/plugin-dialog";
+import { check } from "@tauri-apps/plugin-updater";
 import { useNavigate, useSearchParams } from "react-router";
 import * as api from "../api";
 import type { AppConfig, AppSettings, DbStats } from "../types";
@@ -20,6 +21,8 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [dbPath, setDbPath] = useState("");
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [highlightSection, setHighlightSection] = useState<string | null>(null);
@@ -318,27 +321,59 @@ export default function SettingsPage() {
 
       {/* Update mode selector */}
       <div className="bg-zinc-900 rounded-xl border border-zinc-800">
-        <div className="px-5 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">{t("settings.updateMode")}</p>
-            <p className="text-xs text-zinc-500">
-              {t("settings.updateModeDesc")}
-            </p>
+        <div className="px-5 py-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">{t("settings.updateMode")}</p>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {t(`settings.updateModeDesc_${settings.update_mode}`)}
+              </p>
+            </div>
+            <div className="flex bg-zinc-800 rounded-lg p-0.5 gap-0.5">
+              {(["off", "notify", "auto"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setSettings({ ...settings, update_mode: mode })}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    settings.update_mode === mode
+                      ? "bg-blue-600 text-white"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {t(`settings.updateMode_${mode}`)}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="flex bg-zinc-800 rounded-lg p-0.5 gap-0.5">
-            {(["off", "notify", "auto"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => setSettings({ ...settings, update_mode: mode })}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  settings.update_mode === mode
-                    ? "bg-blue-600 text-white"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
-              >
-                {t(`settings.updateMode_${mode}`)}
-              </button>
-            ))}
+          <div className="flex items-center gap-3">
+            <button
+              disabled={checkingUpdate}
+              onClick={async () => {
+                setCheckingUpdate(true);
+                setUpdateCheckResult(null);
+                try {
+                  const update = await check();
+                  if (update) {
+                    setUpdateCheckResult(t("update.available", { version: update.version }));
+                  } else {
+                    setUpdateCheckResult(t("update.upToDate"));
+                    setTimeout(() => setUpdateCheckResult(null), 5000);
+                  }
+                } catch {
+                  setUpdateCheckResult(t("update.error"));
+                  setTimeout(() => setUpdateCheckResult(null), 5000);
+                } finally {
+                  setCheckingUpdate(false);
+                }
+              }}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 rounded-lg transition-colors text-zinc-300"
+            >
+              <RefreshCw size={13} className={checkingUpdate ? "animate-spin" : ""} />
+              {t("settings.checkForUpdates")}
+            </button>
+            {updateCheckResult && (
+              <span className="text-xs text-zinc-400">{updateCheckResult}</span>
+            )}
           </div>
         </div>
       </div>

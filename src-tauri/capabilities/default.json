@@ -10,6 +10,7 @@
     "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "autostart:default",
-    "updater:default"
+    "updater:default",
+    "notification:default"
   ]
 }
