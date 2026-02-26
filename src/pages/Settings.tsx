@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Save, FolderOpen, Database, ExternalLink, Download, Upload, RefreshCw } from "lucide-react";
+import { FolderOpen, Database, ExternalLink, Download, Upload, RefreshCw } from "lucide-react";
 import { open, save, message } from "@tauri-apps/plugin-dialog";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { useNavigate, useSearchParams } from "react-router";
@@ -18,7 +18,6 @@ export default function SettingsPage() {
   const { t, i18n } = useTranslation();
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [saved, setSaved] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [dbPath, setDbPath] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -61,11 +60,16 @@ export default function SettingsPage() {
     if (!config || !settings) return;
     const newConfig = { ...config, settings };
     await api.saveConfig(newConfig);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    // Restart watcher with new settings
-    api.restartWatcher().catch(() => {});
   };
+
+  // Auto-save settings when they change (debounced)
+  useEffect(() => {
+    if (!config || !settings) return;
+    const timer = setTimeout(() => {
+      handleSave();
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [settings]);
 
   const handleLanguageChange = (lang: string) => {
     i18n.changeLanguage(lang);
@@ -84,13 +88,6 @@ export default function SettingsPage() {
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">{t("settings.title")}</h2>
-        <button
-          onClick={handleSave}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition-colors"
-        >
-          <Save size={16} />
-          {saved ? t("settings.saved") : t("settings.save")}
-        </button>
       </div>
 
       <div className="bg-zinc-900 rounded-xl border border-zinc-800 divide-y divide-zinc-800">
