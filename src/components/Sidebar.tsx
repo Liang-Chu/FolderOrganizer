@@ -1,5 +1,7 @@
+import { useState, useEffect } from "react";
 import { NavLink } from "react-router";
 import { useTranslation } from "react-i18next";
+import { getVersion } from "@tauri-apps/api/app";
 import {
   LayoutDashboard,
   FolderOpen,
@@ -17,6 +19,11 @@ const navItems = [
 
 export default function Sidebar() {
   const { t } = useTranslation();
+  const [appVersion, setAppVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then((v) => setAppVersion(v));
+  }, []);
 
   return (
     <aside className="w-56 bg-zinc-900 border-r border-zinc-800 flex flex-col h-full">
@@ -46,7 +53,7 @@ export default function Sidebar() {
       </nav>
       <UpdateChecker />
       <div className="px-5 py-3 border-t border-zinc-800 text-xs text-zinc-500">
-        {t("app.version")}
+        v{appVersion}
       </div>
     </aside>
   );
