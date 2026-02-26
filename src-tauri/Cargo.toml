@@ -1,13 +1,13 @@
 [package]
-name = "download-organizer"
+name = "folder-organizer"
 version = "1.0.0"
-description = "Lightweight desktop app to auto-organize your downloads"
+description = "Lightweight desktop app to auto-organize your folders"
 authors = ["Liang Chu"]
 license = "MIT"
 edition = "2021"
 
 [lib]
-name = "download_organizer_lib"
+name = "folder_organizer_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

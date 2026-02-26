@@ -4,6 +4,7 @@ use super::models::FileIndexEntry;
 use super::Database;
 
 impl Database {
+    #[allow(dead_code)]
     pub fn upsert_file(
         &self,
         id: &str,
@@ -58,6 +59,7 @@ impl Database {
         Ok(entries)
     }
 
+    #[allow(dead_code)]
     pub fn remove_file_by_path(&self, file_path: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(

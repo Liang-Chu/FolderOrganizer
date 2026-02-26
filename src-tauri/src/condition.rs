@@ -244,7 +244,7 @@ fn is_word_boundary(chars: &[char], pos: usize) -> bool {
 //   primary  = "(" or_expr ")" | glob | regex
 
 fn parse_or<'a>(tokens: &'a [Token]) -> Result<(Condition, &'a [Token]), String> {
-    let (mut left, mut rest) = parse_and(tokens)?;
+    let (left, mut rest) = parse_and(tokens)?;
     let mut parts = vec![left];
 
     while !rest.is_empty() && rest[0] == Token::Or {
@@ -261,7 +261,7 @@ fn parse_or<'a>(tokens: &'a [Token]) -> Result<(Condition, &'a [Token]), String>
 }
 
 fn parse_and<'a>(tokens: &'a [Token]) -> Result<(Condition, &'a [Token]), String> {
-    let (mut left, mut rest) = parse_not(tokens)?;
+    let (left, mut rest) = parse_not(tokens)?;
     let mut parts = vec![left];
 
     while !rest.is_empty() && rest[0] == Token::And {
@@ -338,6 +338,7 @@ pub fn validate_text(input: &str) -> Result<(), String> {
 }
 
 /// Validate a condition tree (check regex patterns are valid, etc.)
+#[allow(dead_code)]
 pub fn validate_condition(cond: &Condition) -> Result<(), String> {
     match cond {
         Condition::Regex { pattern } => {

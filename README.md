@@ -1,6 +1,6 @@
-# Download Organizer
+# Folder Organizer
 
-A lightweight desktop application that monitors user-configured folders (e.g. Downloads) and automatically organizes files based on composable rules.
+A lightweight desktop application that monitors user-configured folders and automatically organizes files based on composable rules.
 
 ## Features
 
@@ -14,7 +14,7 @@ A lightweight desktop application that monitors user-configured folders (e.g. Do
 - **Activity log** with paginated history and undo for deletions
 - **Scheduled deletions** run daily at a configurable hour
 - **Config import/export** for backup and sharing
-- **Multi-language** UI (English, French, Chinese)
+- **Multi-language** UI (English, French, Mandarin)
 
 ## Tech Stack
 
@@ -67,7 +67,7 @@ claudeDoc/            # LLM context docs (architecture, progress, TODO)
 
 ## Data Storage
 
-All data is stored locally in `%APPDATA%/download-organizer/`:
+All data is stored locally in `%APPDATA%/folder-organizer/`:
 
 | File | Contents |
 |------|----------|

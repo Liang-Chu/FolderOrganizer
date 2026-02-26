@@ -2,11 +2,11 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-/// Get the app data directory: %APPDATA%/download-organizer/
+/// Get the app data directory: %APPDATA%/folder-organizer/
 pub fn app_data_dir() -> PathBuf {
     let dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("download-organizer");
+        .join("folder-organizer");
     fs::create_dir_all(&dir).ok();
     dir
 }

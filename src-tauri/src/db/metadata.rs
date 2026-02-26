@@ -18,6 +18,7 @@ impl Database {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn update_rule_triggered(
         &self,
         rule_id: &str,

@@ -350,7 +350,7 @@ export default function SettingsPage() {
             onClick={async () => {
               try {
                 const filePath = await save({
-                  defaultPath: "download-organizer-config.json",
+                  defaultPath: "folder-organizer-config.json",
                   filters: [{ name: "JSON", extensions: ["json"] }],
                   title: t("settings.exportConfig"),
                 });
@@ -455,7 +455,7 @@ export default function SettingsPage() {
 
         <p className="text-xs text-zinc-600 leading-relaxed">
           {t("settings.localStorageNote")}{" "}
-          <code className="text-zinc-500">{dbPath || "%APPDATA%\\download-organizer\\"}</code>.
+          <code className="text-zinc-500">{dbPath || "%APPDATA%\\folder-organizer\\"}</code>.
           {" "}{t("settings.noCloud")}
         </p>
       </div>

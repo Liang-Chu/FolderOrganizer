@@ -140,7 +140,7 @@ pub fn run() {
             let _tray = tauri::tray::TrayIconBuilder::new()
                 .icon(app.default_window_icon().cloned().unwrap())
                 .menu(&tray_menu)
-                .tooltip("Download Organizer")
+                .tooltip("Folder Organizer")
                 .on_tray_icon_event(|tray, event| {
                     if let tauri::tray::TrayIconEvent::Click { .. } = event {
                         if let Some(w) = tray.app_handle().get_webview_window("main") {
