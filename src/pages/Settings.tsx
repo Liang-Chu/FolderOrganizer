@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Save, FolderOpen, Database, ExternalLink, Download, Upload, RefreshCw } from "lucide-react";
 import { open, save, message } from "@tauri-apps/plugin-dialog";
-import { check } from "@tauri-apps/plugin-updater";
+import { check, type Update } from "@tauri-apps/plugin-updater";
 import { useNavigate, useSearchParams } from "react-router";
 import * as api from "../api";
 import type { AppConfig, AppSettings, DbStats } from "../types";
@@ -23,6 +23,9 @@ export default function SettingsPage() {
   const [dbPath, setDbPath] = useState("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateCheckResult, setUpdateCheckResult] = useState<string | null>(null);
+  const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState(0);
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [highlightSection, setHighlightSection] = useState<string | null>(null);
@@ -345,15 +348,17 @@ export default function SettingsPage() {
               ))}
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <button
-              disabled={checkingUpdate}
+              disabled={checkingUpdate || installing}
               onClick={async () => {
                 setCheckingUpdate(true);
                 setUpdateCheckResult(null);
+                setPendingUpdate(null);
                 try {
                   const update = await check();
                   if (update) {
+                    setPendingUpdate(update);
                     setUpdateCheckResult(t("update.available", { version: update.version }));
                   } else {
                     setUpdateCheckResult(t("update.upToDate"));
@@ -373,6 +378,44 @@ export default function SettingsPage() {
             </button>
             {updateCheckResult && (
               <span className="text-xs text-zinc-400">{updateCheckResult}</span>
+            )}
+            {pendingUpdate && !installing && (
+              <button
+                onClick={async () => {
+                  setInstalling(true);
+                  setInstallProgress(0);
+                  try {
+                    let downloaded = 0;
+                    let contentLength = 0;
+                    await pendingUpdate.downloadAndInstall((event) => {
+                      switch (event.event) {
+                        case "Started":
+                          contentLength = event.data.contentLength ?? 0;
+                          break;
+                        case "Progress":
+                          downloaded += event.data.chunkLength;
+                          setInstallProgress(contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0);
+                          break;
+                        case "Finished":
+                          break;
+                      }
+                    });
+                    setUpdateCheckResult(t("update.ready"));
+                    setPendingUpdate(null);
+                  } catch {
+                    setUpdateCheckResult(t("update.error"));
+                  } finally {
+                    setInstalling(false);
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors text-white"
+              >
+                <Download size={13} />
+                {t("update.install")}
+              </button>
+            )}
+            {installing && (
+              <span className="text-xs text-blue-400">{t("update.downloading", { progress: installProgress })}</span>
             )}
           </div>
         </div>
