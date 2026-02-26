@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { isPermissionGranted, requestPermission, sendNotification, registerActionTypes, onAction } from "@tauri-apps/plugin-notification";
 import { Download, X, RefreshCw, CheckCircle } from "lucide-react";
 import * as api from "../api";
 
@@ -20,6 +20,55 @@ export function UpdateChecker() {
   const [dismissed, setDismissed] = useState(false);
   const [updateMode, setUpdateMode] = useState<'off' | 'notify' | 'auto'>('notify');
   const [snoozedUntil, setSnoozedUntil] = useState<number>(0);
+  const pendingUpdateRef = useRef<Update | null>(null);
+
+  // Register notification action types and handler once
+  useEffect(() => {
+    registerActionTypes([{
+      id: "update-actions",
+      actions: [
+        { id: "update-now", title: "Update Now" },
+        { id: "remind-later", title: "Remind Later" },
+        { id: "skip", title: "Skip" },
+      ],
+    }]).catch(() => {});
+
+    const unlistenPromise = onAction((notification) => {
+      const actionId = (notification as any).actionId ?? (notification as any).action;
+      if (actionId === "update-now" && pendingUpdateRef.current) {
+        // Trigger install from notification click
+        const update = pendingUpdateRef.current;
+        setState({ status: "downloading", progress: 0 });
+        let downloaded = 0;
+        let contentLength = 0;
+        update.downloadAndInstall((event) => {
+          switch (event.event) {
+            case "Started":
+              contentLength = event.data.contentLength ?? 0;
+              break;
+            case "Progress":
+              downloaded += event.data.chunkLength;
+              setState({
+                status: "downloading",
+                progress: contentLength > 0 ? Math.round((downloaded / contentLength) * 100) : 0,
+              });
+              break;
+            case "Finished":
+              setState({ status: "ready" });
+              break;
+          }
+        }).then(() => setState({ status: "ready" }))
+          .catch(() => setState({ status: "idle" }));
+      } else if (actionId === "remind-later") {
+        setSnoozedUntil(Date.now() + 24 * 60 * 60 * 1000);
+        setDismissed(true);
+      } else if (actionId === "skip") {
+        setDismissed(true);
+      }
+    });
+
+    return () => { unlistenPromise.then((fn) => fn.unregister()); };
+  }, []);
 
   useEffect(() => {
     api.getConfig().then((cfg) => {
@@ -37,7 +86,7 @@ export function UpdateChecker() {
     };
   }, [updateMode]);
 
-  const sendSystemNotification = async (version: string) => {
+  const sendSystemNotification = async (version: string, update: Update) => {
     try {
       let granted = await isPermissionGranted();
       if (!granted) {
@@ -45,9 +94,11 @@ export function UpdateChecker() {
         granted = permission === "granted";
       }
       if (granted) {
+        pendingUpdateRef.current = update;
         sendNotification({
           title: "Folder Organizer",
           body: t("update.notifyBody", { version }),
+          actionTypeId: "update-actions",
         });
       }
     } catch (err) {
@@ -87,7 +138,7 @@ export function UpdateChecker() {
           // Notify mode: show system notification + in-app banner
           const now = Date.now();
           if (now >= snoozedUntil) {
-            await sendSystemNotification(update.version);
+            await sendSystemNotification(update.version, update);
             setState({ status: "available", update });
             setDismissed(false);
           }
