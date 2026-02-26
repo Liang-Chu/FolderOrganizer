@@ -1,6 +1,6 @@
 [package]
 name = "folder-organizer"
-version = "1.0.0"
+version = "1.1.0"
 description = "Lightweight desktop app to auto-organize your folders"
 authors = ["Liang Chu"]
 license = "MIT"
