@@ -18,4 +18,34 @@
     "autostart:default",
     "updater:default"
   ]
+  ,
+  "defaultRules": [
+      {
+        "id": "default-download-clean",
+        "name": "Download Clean",
+        "description": "Deletes files in the Downloads folder that are older than 3 days.",
+        "enabled": false,
+        "folder": "Downloads",
+        "rules": [
+          {
+            "id": "default-download-clean-rule",
+            "name": "Download Clean",
+            "description": "Deletes files older than 3 days in Downloads.",
+            "enabled": false,
+            "condition": {
+              "type": "Always"
+            },
+            "condition_text": "*",
+            "action": {
+              "type": "Delete",
+              "after_days": 3
+            },
+            "whitelist": [],
+            "match_subdirectories": false
+          }
+        ]
+      }
+  ]
+  ,
+  "default_sort_root": "C:\\Users\\<username>\\Sorted"
 }

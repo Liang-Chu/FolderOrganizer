@@ -190,7 +190,6 @@
     "startWithOsDesc": "Lancer automatiquement à la connexion",
     "minimizeToTray": "Réduire dans la barre",
     "minimizeToTrayDesc": "Continuer en arrière-plan dans la barre des tâches",
-    // ...existing code...
     "defaultSortRoot": "Dossier racine de tri",
     "defaultSortRootDesc": "Dossier racine pour les destinations de déplacement",
     "selectSortRoot": "Sélectionner le dossier racine de tri",
