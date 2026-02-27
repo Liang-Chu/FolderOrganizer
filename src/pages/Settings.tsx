@@ -179,7 +179,6 @@ export default function SettingsPage() {
           </label>
         </div>
 
-        // ...existing code...
 
         {/* Default sort root */}
         <div className="px-5 py-4">
