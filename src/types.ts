@@ -9,7 +9,7 @@ export interface AppSettings {
   scan_interval_minutes: number;
   start_with_os: boolean;
   minimize_to_tray: boolean;
-  notifications_enabled: boolean;
+  // ...existing code...
   log_retention_days: number;
   /** Maximum database size in MB (0 = unlimited) */
   max_storage_mb: number;

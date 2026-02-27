@@ -32,7 +32,7 @@ pub struct AppSettings {
     /// Minimize to tray on close
     pub minimize_to_tray: bool,
     /// Show toast notifications on actions
-    pub notifications_enabled: bool,
+    // ...existing code...
     /// Days to keep activity log entries
     pub log_retention_days: u32,
     /// Maximum database size in MB (0 = unlimited)
@@ -73,7 +73,7 @@ impl Default for AppSettings {
             scan_interval_minutes: 5,
             start_with_os: true,
             minimize_to_tray: true,
-            notifications_enabled: true,
+            // ...existing code...
             log_retention_days: 30,
             max_storage_mb: default_max_storage_mb(),
             default_sort_root: default_sort_root(),

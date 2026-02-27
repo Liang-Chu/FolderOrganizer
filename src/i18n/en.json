@@ -190,8 +190,6 @@
     "startWithOsDesc": "Launch automatically when you log in",
     "minimizeToTray": "Minimize to Tray",
     "minimizeToTrayDesc": "Keep running in system tray when window is closed",
-    "notifications": "Notifications",
-    "notificationsDesc": "Show toast notifications when files are processed",
     "defaultSortRoot": "Default Sort Root",
     "defaultSortRootDesc": "Root folder for Move destinations — subfolder names resolve under this path",
     "selectSortRoot": "Select default sort root",

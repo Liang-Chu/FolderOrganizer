@@ -179,29 +179,7 @@ export default function SettingsPage() {
           </label>
         </div>
 
-        {/* Notifications */}
-        <div className="px-5 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">{t("settings.notifications")}</p>
-            <p className="text-xs text-zinc-500">
-              {t("settings.notificationsDesc")}
-            </p>
-          </div>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings.notifications_enabled}
-              onChange={(e) =>
-                setSettings({
-                  ...settings,
-                  notifications_enabled: e.target.checked,
-                })
-              }
-              className="sr-only peer"
-            />
-            <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-          </label>
-        </div>
+        // ...existing code...
 
         {/* Default sort root */}
         <div className="px-5 py-4">
