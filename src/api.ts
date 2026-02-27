@@ -109,7 +109,10 @@ export const runDeletions = () =>
 
 // ── Watcher Control ─────────────────────────────────────────
 
-export const scanNow = () => invoke<void>("scan_now");
+export const scanNow = () => invoke<number>("scan_now");
+
+export const scanFolder = (folderId: string) =>
+  invoke<number>("scan_folder", { folderId });
 
 export const restartWatcher = () => invoke<void>("restart_watcher");
 

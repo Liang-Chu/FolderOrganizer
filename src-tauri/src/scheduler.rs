@@ -82,10 +82,14 @@ pub fn process_due_deletions(db: &Database) -> u32 {
                     );
                     if success {
                         count += 1;
+                        // Only remove scheduled_deletion if deletion succeeded
+                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
                     }
+                    // If deletion failed, keep scheduled_deletion for retry
+                } else {
+                    // File no longer exists, remove scheduled_deletion
+                    let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
                 }
-                // Remove from scheduled_deletions regardless (file gone or acted upon)
-                let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
             }
         }
         Err(e) => {
@@ -101,46 +105,178 @@ pub fn process_due_deletions(db: &Database) -> u32 {
 
 /// Scan all enabled folders for existing files and evaluate rules.
 /// This handles files that were added while the app was not running.
-/// Delete rules silently schedule files (no activity log spam).
+/// Delete rules log a "scheduled" activity entry so that "last run" stats update.
 /// Move rules execute immediately and log to activity.
+/// Returns the number of files processed (matched by any rule).
 pub fn scan_existing_files(
     config: &AppConfig,
     db: &Database,
-) {
+) -> u32 {
     let now_str = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut total_processed = 0u32;
 
     for folder in &config.folders {
         if !folder.enabled || !folder.path.exists() {
             continue;
         }
 
-        if let Ok(entries) = fs::read_dir(&folder.path) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
+        let needs_recursive = folder.watch_subdirectories
+            || folder.rules.iter().any(|r| r.match_subdirectories);
 
-                // evaluate_file now returns None for Delete rules (they silently schedule).
-                // It only returns Some for Move rules that actually execute.
-                if let Some(result) = crate::rules::evaluate_file(&path, folder, db) {
+        let files = collect_files(&folder.path, needs_recursive);
+
+        for path in files {
+            // Catch panics per-file to prevent one bad file from crashing the entire scan
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::rules::evaluate_file_full(&path, folder, db)
+            }));
+
+            match result {
+                Ok(crate::rules::EvalOutcome::Action(action_result)) => {
                     let _ = db.insert_activity(
                         &Uuid::new_v4().to_string(),
-                        &result.file_path,
-                        &result.file_name,
-                        &result.action,
-                        Some(&result.rule_name),
+                        &action_result.file_path,
+                        &action_result.file_name,
+                        &action_result.action,
+                        Some(&action_result.rule_name),
                         Some(&folder.id),
                         &now_str,
-                        if result.success { "success" } else { "error" },
-                        result.details.as_deref(),
+                        if action_result.success { "success" } else { "error" },
+                        action_result.details.as_deref(),
                     );
+                    total_processed += 1;
+                }
+                Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted }) => {
+                    // Only log activity for newly scheduled files (avoid spam on re-scans)
+                    if newly_inserted {
+                        let _ = db.insert_activity(
+                            &Uuid::new_v4().to_string(),
+                            &file_path,
+                            &file_name,
+                            "scheduled",
+                            Some(&rule_name),
+                            Some(&folder.id),
+                            &now_str,
+                            "success",
+                            Some("File scheduled for deletion"),
+                        );
+                    }
+                    total_processed += 1;
+                }
+                Ok(crate::rules::EvalOutcome::NoMatch) => {
+                    // No rule matched — nothing to do
+                }
+                Err(e) => {
+                    log::error!("Panic while processing file {}: {:?}", path.display(), e);
                 }
             }
         }
     }
 
-    log::info!("Folder scan completed");
+    log::info!("Folder scan completed ({} files processed)", total_processed);
+    total_processed
+}
+
+/// Scan a single folder for existing files and evaluate rules.
+/// Returns the number of files processed (matched by any rule).
+pub fn scan_single_folder(
+    config: &AppConfig,
+    db: &Database,
+    folder_id: &str,
+) -> u32 {
+    let now_str = Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut total_processed = 0u32;
+
+    let folder = match config.folders.iter().find(|f| f.id == folder_id) {
+        Some(f) => f,
+        None => return 0,
+    };
+
+    if !folder.enabled || !folder.path.exists() {
+        return 0;
+    }
+
+    let needs_recursive = folder.watch_subdirectories
+        || folder.rules.iter().any(|r| r.match_subdirectories);
+
+    let files = collect_files(&folder.path, needs_recursive);
+
+    for path in files {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            crate::rules::evaluate_file_full(&path, folder, db)
+        }));
+
+        match result {
+            Ok(crate::rules::EvalOutcome::Action(action_result)) => {
+                let _ = db.insert_activity(
+                    &Uuid::new_v4().to_string(),
+                    &action_result.file_path,
+                    &action_result.file_name,
+                    &action_result.action,
+                    Some(&action_result.rule_name),
+                    Some(&folder.id),
+                    &now_str,
+                    if action_result.success { "success" } else { "error" },
+                    action_result.details.as_deref(),
+                );
+                total_processed += 1;
+            }
+            Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted }) => {
+                if newly_inserted {
+                    let _ = db.insert_activity(
+                        &Uuid::new_v4().to_string(),
+                        &file_path,
+                        &file_name,
+                        "scheduled",
+                        Some(&rule_name),
+                        Some(&folder.id),
+                        &now_str,
+                        "success",
+                        Some("File scheduled for deletion"),
+                    );
+                }
+                total_processed += 1;
+            }
+            Ok(crate::rules::EvalOutcome::NoMatch) => {}
+            Err(e) => {
+                log::error!("Panic while processing file {}: {:?}", path.display(), e);
+            }
+        }
+    }
+
+    log::info!("Single folder scan completed for {} ({} files processed)", folder_id, total_processed);
+    total_processed
+}
+
+/// Collect all files from a directory, optionally recursing into subdirectories.
+/// Handles errors gracefully — skips unreadable directories.
+fn collect_files(dir: &Path, recursive: bool) -> Vec<std::path::PathBuf> {
+    let mut files = Vec::new();
+    collect_files_inner(dir, recursive, &mut files);
+    files
+}
+
+fn collect_files_inner(dir: &Path, recursive: bool, files: &mut Vec<std::path::PathBuf>) {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) => {
+            log::warn!("Failed to read directory {}: {}", dir.display(), e);
+            return;
+        }
+    };
+
+    for entry in entries {
+        let entry = match entry {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if path.is_file() {
+            files.push(path);
+        } else if recursive && path.is_dir() {
+            collect_files_inner(&path, true, files);
+        }
+    }
 }
 
 /// Safe delete: send file to the OS recycle bin.

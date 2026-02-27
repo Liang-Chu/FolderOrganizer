@@ -71,7 +71,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             scan_interval_minutes: 5,
-            start_with_os: false,
+            start_with_os: true,
             minimize_to_tray: true,
             notifications_enabled: true,
             log_retention_days: 30,

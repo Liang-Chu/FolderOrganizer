@@ -51,10 +51,26 @@ pub fn ensure_dir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn scan_now(state: State<AppState>) -> Result<(), String> {
-    let config = state.config.lock().map_err(|e| e.to_string())?;
-    scheduler::scan_existing_files(&config, &state.db);
-    Ok(())
+pub fn scan_now(state: State<AppState>) -> Result<u32, String> {
+    // Clone the config so we don't hold the mutex lock during the entire scan
+    let config = {
+        let guard = state.config.lock().map_err(|e| e.to_string())?;
+        guard.clone()
+    };
+    let count = scheduler::scan_existing_files(&config, &state.db);
+    Ok(count)
+}
+
+/// Scan a single folder for existing files and evaluate rules.
+/// Returns the number of files processed.
+#[tauri::command]
+pub fn scan_folder(state: State<AppState>, folder_id: String) -> Result<u32, String> {
+    let config = {
+        let guard = state.config.lock().map_err(|e| e.to_string())?;
+        guard.clone()
+    };
+    let count = scheduler::scan_single_folder(&config, &state.db, &folder_id);
+    Ok(count)
 }
 
 #[tauri::command]

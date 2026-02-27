@@ -52,13 +52,56 @@ pub fn update_rule(
         .find(|f| f.id == folder_id)
         .ok_or("Folder not found")?;
 
-    if let Some(existing) = folder.rules.iter_mut().find(|r| r.id() == rule.id()) {
-        *existing = rule;
-    } else {
-        return Err("Rule not found".to_string());
+    // Capture old rule info before replacing
+    let old_rule = folder
+        .rules
+        .iter()
+        .find(|r| r.id() == rule.id())
+        .cloned()
+        .ok_or("Rule not found")?;
+
+    let new_rule = rule.clone();
+    if let Some(existing) = folder.rules.iter_mut().find(|r| r.id() == new_rule.id()) {
+        *existing = new_rule;
     }
 
     config::save_config(&config)?;
+
+    // Reconcile scheduled deletions when a rule changes
+    match (&old_rule.action, &rule.action) {
+        // Delete → Delete: if after_days changed, update all pending deletions
+        (
+            config::Action::Delete { after_days: old_days },
+            config::Action::Delete { after_days: new_days },
+        ) => {
+            if old_days != new_days {
+                let _ = state.db.update_scheduled_deletion_days(
+                    &folder_id,
+                    &rule.name,
+                    *new_days,
+                );
+                log::info!(
+                    "Updated scheduled deletions for rule '{}': {} days → {} days",
+                    rule.name, old_days, new_days
+                );
+            }
+            // If condition or name changed, remove old and rescan
+            if old_rule.condition_text != rule.condition_text || old_rule.name != rule.name {
+                let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
+            }
+        }
+        // Delete → Move: remove all scheduled deletions for this rule
+        (config::Action::Delete { .. }, config::Action::Move { .. }) => {
+            let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
+            log::info!(
+                "Cleared scheduled deletions for rule '{}' (changed to Move)",
+                old_rule.name
+            );
+        }
+        // Move → Delete or Move → Move: nothing to reconcile for scheduled deletions
+        _ => {}
+    }
+
     Ok(())
 }
 

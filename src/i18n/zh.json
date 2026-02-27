@@ -15,6 +15,9 @@
   "dashboard": {
     "title": "仪表盘",
     "scanNow": "立即扫描",
+    "scanning": "扫描中…",
+    "scanComplete": "扫描完成 — 处理了 {{count}} 个文件。",
+    "scanFailed": "扫描失败。",
     "pause": "暂停",
     "start": "启动",
     "watchedFolders": "监控文件夹",

@@ -117,4 +117,31 @@ impl Database {
         )?;
         Ok(())
     }
+
+    /// Remove all scheduled deletions for a specific rule in a folder.
+    pub fn remove_scheduled_deletions_by_rule(&self, folder_id: &str, rule_name: &str) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM scheduled_deletions WHERE folder_id = ?1 AND rule_name = ?2",
+            params![folder_id, rule_name],
+        )
+    }
+
+    /// Update the delete_after timestamp for all scheduled deletions of a specific rule in a folder.
+    /// Recalculates delete_after = scheduled_at + new after_days.
+    pub fn update_scheduled_deletion_days(
+        &self,
+        folder_id: &str,
+        rule_name: &str,
+        after_days: u32,
+    ) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        // SQLite datetime arithmetic: add after_days to the original scheduled_at
+        conn.execute(
+            "UPDATE scheduled_deletions
+             SET delete_after = datetime(scheduled_at, '+' || ?3 || ' days')
+             WHERE folder_id = ?1 AND rule_name = ?2",
+            params![folder_id, rule_name, after_days],
+        )
+    }
 }

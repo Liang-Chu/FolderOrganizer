@@ -54,6 +54,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [showAllDeletions, setShowAllDeletions] = useState(false);
   const [deletionResult, setDeletionResult] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanResult, setScanResult] = useState<string | null>(null);
   const [sortCol, setSortCol] = useState<"file" | "rule" | "date">("date");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -90,8 +92,20 @@ export default function Dashboard() {
   };
 
   const handleScan = async () => {
-    await api.scanNow();
-    loadData();
+    setScanning(true);
+    setScanResult(null);
+    try {
+      const count = await api.scanNow();
+      setScanResult(t("dashboard.scanComplete", { count }));
+      setTimeout(() => setScanResult(null), 4000);
+      await loadData();
+    } catch (e) {
+      console.error("Scan failed:", e);
+      setScanResult(t("dashboard.scanFailed"));
+      setTimeout(() => setScanResult(null), 4000);
+    } finally {
+      setScanning(false);
+    }
   };
 
   const handleRunDeletions = async () => {
@@ -140,13 +154,19 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">{t("dashboard.title")}</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {scanResult && (
+            <span className="flex items-center text-xs text-zinc-400 px-2">
+              {scanResult}
+            </span>
+          )}
           <button
             onClick={handleScan}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-sm font-medium transition-colors"
+            disabled={scanning}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed text-sm font-medium transition-colors"
           >
-            <RefreshCw size={16} />
-            {t("dashboard.scanNow")}
+            <RefreshCw size={16} className={scanning ? "animate-spin" : ""} />
+            {scanning ? t("dashboard.scanning") : t("dashboard.scanNow")}
           </button>
           <button
             onClick={toggleWatcher}

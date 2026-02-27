@@ -158,6 +158,7 @@ pub fn run() {
             commands::run_deletions,
             commands::get_rule_execution_stats,
             commands::scan_now,
+            commands::scan_folder,
             commands::ensure_dir,
             commands::open_in_explorer,
             commands::restart_watcher,
@@ -174,6 +175,18 @@ pub fn run() {
             commands::get_db_path,
         ])
         .setup(move |app| {
+            // ── Sync autostart with config on launch ──
+            {
+                use tauri_plugin_autostart::ManagerExt;
+                let autostart = app.autolaunch();
+                let start_with_os = cli_config.lock().map(|c| c.settings.start_with_os).unwrap_or(true);
+                if start_with_os {
+                    let _ = autostart.enable();
+                } else {
+                    let _ = autostart.disable();
+                }
+            }
+
             // ── System tray ──
             let show_i = tauri::menu::MenuItem::with_id(app, "show", "Show Window", true, None::<&str>)?;
             let quit_i = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;

@@ -169,6 +169,10 @@ export default function Folders() {
     if (target.closest("button, a, input, textarea, label")) {
       return;
     }
+    // Don't collapse the folder if a rule is being edited in it — user would lose edits
+    if (editingFolderId === folderId && editingRule) {
+      return;
+    }
     toggleSection(folderId, "rules");
   };
 
@@ -187,6 +191,10 @@ export default function Folders() {
   // ── Section expand/collapse ──
 
   const toggleSection = (folderId: string, section: ExpandedSection) => {
+    // Don't collapse if a rule is being edited in this folder — user would lose edits
+    if (editingFolderId === folderId && editingRule && expandedSections[folderId] === section) {
+      return;
+    }
     setExpandedSections((prev) => ({
       ...prev,
       [folderId]: prev[folderId] === section ? null : section,
@@ -205,15 +213,27 @@ export default function Folders() {
 
   const handleSaveRule = async (rule: Rule) => {
     if (!editingFolderId) return;
-    if (isNewRule) {
-      await api.addRule(editingFolderId, rule);
+    const folderId = editingFolderId;
+    const wasNewRule = isNewRule;
+    if (wasNewRule) {
+      await api.addRule(folderId, rule);
     } else {
-      await api.updateRule(editingFolderId, rule);
+      await api.updateRule(folderId, rule);
     }
     setEditingRule(null);
     setIsNewRule(false);
     setEditingFolderId(null);
     await loadFolders();
+    // Trigger a scan for the folder when a rule is created or updated
+    // For new rules: picks up existing files that match
+    // For updated rules: re-evaluates after condition/action changes
+    //   (backend already recalculated scheduled deletion dates)
+    try {
+      await api.scanFolder(folderId);
+      await loadFolders(); // Reload to pick up updated stats
+    } catch (e) {
+      console.error("Scan after rule save failed:", e);
+    }
   };
 
   const handleDeleteRule = async (folderId: string, ruleId: string) => {
@@ -500,7 +520,7 @@ export default function Folders() {
 
                     {/* Rule editor (inline) */}
                     {editingFolderId === folder.id && editingRule && (
-                      <div className="mb-3">
+                      <div className="mb-3" onClick={(e) => e.stopPropagation()}>
                         <RuleEditor
                           rule={editingRule}
                           isNew={isNewRule}

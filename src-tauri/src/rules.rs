@@ -18,6 +18,21 @@ pub struct RuleActionResult {
     pub details: Option<String>,
 }
 
+/// Result of evaluating a file against folder rules.
+pub enum EvalOutcome {
+    /// A move/immediate action was executed.
+    Action(RuleActionResult),
+    /// A deletion was scheduled (new or already existed).
+    Scheduled {
+        file_path: String,
+        file_name: String,
+        rule_name: String,
+        newly_inserted: bool,
+    },
+    /// No rule matched this file.
+    NoMatch,
+}
+
 /// Check if a filename matches any glob pattern in a whitelist.
 fn is_whitelisted(file_name: &str, whitelist: &[String]) -> bool {
     let name_lower = file_name.to_lowercase();
@@ -82,11 +97,25 @@ fn is_file_in_dir(file_path: &Path, dir: &Path) -> bool {
 
 /// Evaluate a single file against a folder's rules (in priority order).
 /// First matching rule wins. Returns the action result, or None if no match.
+/// This is used by the file watcher — it only returns Move action results.
 pub fn evaluate_file(
     file_path: &Path,
     folder: &WatchedFolder,
     db: &Database,
 ) -> Option<RuleActionResult> {
+    match evaluate_file_full(file_path, folder, db) {
+        EvalOutcome::Action(result) => Some(result),
+        _ => None,
+    }
+}
+
+/// Evaluate a single file against a folder's rules (in priority order).
+/// Returns full outcome including scheduled deletions.
+pub fn evaluate_file_full(
+    file_path: &Path,
+    folder: &WatchedFolder,
+    db: &Database,
+) -> EvalOutcome {
     let file_name = file_path
         .file_name()
         .unwrap_or_default()
@@ -95,7 +124,7 @@ pub fn evaluate_file(
 
     // Check folder-level whitelist first
     if is_whitelisted(&file_name, &folder.whitelist) {
-        return None;
+        return EvalOutcome::NoMatch;
     }
 
     for rule in &folder.rules {
@@ -137,22 +166,28 @@ pub fn evaluate_file(
         // Condition matched — execute the action
         match &rule.action {
             Action::Move { .. } => {
-                return Some(execute_action(file_path, &file_name, rule, folder, db));
+                return EvalOutcome::Action(execute_action(file_path, &file_name, rule, folder, db));
             }
             Action::Delete { after_days } => {
                 // Schedule for deletion — insert into scheduled_deletions table.
                 // If already scheduled, this is a silent no-op (no duplicate log).
-                schedule_deletion(file_path, &file_name, rule, folder, db, *after_days);
-                return None; // Don't log anything — logging happens when deletion executes
+                let newly_inserted = schedule_deletion(file_path, &file_name, rule, folder, db, *after_days);
+                return EvalOutcome::Scheduled {
+                    file_path: file_path.to_string_lossy().to_string(),
+                    file_name: file_name.clone(),
+                    rule_name: rule.name.clone(),
+                    newly_inserted,
+                };
             }
         }
     }
 
-    None
+    EvalOutcome::NoMatch
 }
 
 /// Schedule a file for deletion by inserting into the scheduled_deletions table.
 /// Uses upsert so re-scans don't create duplicates.
+/// Returns true if a new entry was inserted, false if already scheduled.
 fn schedule_deletion(
     file_path: &Path,
     file_name: &str,
@@ -160,7 +195,7 @@ fn schedule_deletion(
     folder: &WatchedFolder,
     db: &Database,
     after_days: u32,
-) {
+) -> bool {
     let now = Utc::now();
     let delete_after = now + chrono::Duration::days(after_days as i64);
     let extension = file_path
@@ -186,12 +221,15 @@ fn schedule_deletion(
                 "Scheduled deletion: {} (after {} days, rule: {})",
                 file_name, after_days, rule.name
             );
+            true
         }
         Ok(false) => {
             // Already scheduled — silent no-op
+            false
         }
         Err(e) => {
             log::error!("Failed to schedule deletion for {}: {}", file_name, e);
+            false
         }
     }
 }
