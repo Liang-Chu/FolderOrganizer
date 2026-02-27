@@ -52,7 +52,7 @@ export function UpdateChecker() {
   useEffect(() => {
     if (updateMode === 'off') return;
     const timer = setTimeout(() => checkForUpdate(), 5000);
-    const interval = setInterval(() => checkForUpdate(), 4 * 60 * 60 * 1000);
+    const interval = setInterval(() => checkForUpdate(),  15 * 60 * 1000);
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
