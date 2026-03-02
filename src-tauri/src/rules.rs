@@ -96,20 +96,6 @@ fn is_file_in_dir(file_path: &Path, dir: &Path) -> bool {
 }
 
 /// Evaluate a single file against a folder's rules (in priority order).
-/// First matching rule wins. Returns the action result, or None if no match.
-/// This is used by the file watcher — it only returns Move action results.
-pub fn evaluate_file(
-    file_path: &Path,
-    folder: &WatchedFolder,
-    db: &Database,
-) -> Option<RuleActionResult> {
-    match evaluate_file_full(file_path, folder, db) {
-        EvalOutcome::Action(result) => Some(result),
-        _ => None,
-    }
-}
-
-/// Evaluate a single file against a folder's rules (in priority order).
 /// Returns full outcome including scheduled deletions.
 pub fn evaluate_file_full(
     file_path: &Path,

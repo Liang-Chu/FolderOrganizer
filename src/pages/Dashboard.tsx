@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   FolderOpen,
@@ -11,9 +11,18 @@ import {
   HelpCircle,
   ArrowUpDown,
 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import * as api from "../api";
 import type { AppConfig, ActivityLogEntry, ScheduledDeletion } from "../types";
 import { formatBytes } from "../utils/format";
+
+type ScanStatusEvent = {
+  scope: "all" | "folder";
+  folder_id: string | null;
+  status: "started" | "finished" | "failed";
+  count?: number;
+  error?: string | null;
+};
 
 /** Split a full file path into directory + file name */
 function splitPath(filePath: string): { dir: string; name: string } {
@@ -58,8 +67,11 @@ export default function Dashboard() {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [sortCol, setSortCol] = useState<"file" | "rule" | "date">("date");
   const [sortAsc, setSortAsc] = useState(true);
+  const refreshInFlight = useRef(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     try {
       const [cfg, log, status, deletions] = await Promise.all([
         api.getConfig(),
@@ -75,12 +87,44 @@ export default function Dashboard() {
       console.error("Failed to load dashboard data:", e);
     } finally {
       setLoading(false);
+      refreshInFlight.current = false;
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+    const unlistenDashboard = listen("dashboard-data-changed", () => {
+      loadData();
+    });
+
+    const unlistenScan = listen<ScanStatusEvent>("scan-status", (event) => {
+      const payload = event.payload;
+      if (payload.scope !== "all") return;
+
+      if (payload.status === "started") {
+        setScanning(true);
+        setScanResult(null);
+        return;
+      }
+
+      if (payload.status === "finished") {
+        setScanning(false);
+        setScanResult(t("dashboard.scanComplete", { count: payload.count ?? 0 }));
+        setTimeout(() => setScanResult(null), 4000);
+        loadData();
+        return;
+      }
+
+      setScanning(false);
+      setScanResult(payload.error || t("dashboard.scanFailed"));
+      setTimeout(() => setScanResult(null), 4000);
+    });
+
+    return () => {
+      unlistenDashboard.then((fn) => fn());
+      unlistenScan.then((fn) => fn());
+    };
+  }, [loadData, t]);
 
   const toggleWatcher = async () => {
     if (watcherRunning) {
@@ -92,19 +136,13 @@ export default function Dashboard() {
   };
 
   const handleScan = async () => {
-    setScanning(true);
-    setScanResult(null);
     try {
-      const count = await api.scanNow();
-      setScanResult(t("dashboard.scanComplete", { count }));
-      setTimeout(() => setScanResult(null), 4000);
-      await loadData();
+      await api.scanNow();
     } catch (e) {
       console.error("Scan failed:", e);
-      setScanResult(t("dashboard.scanFailed"));
-      setTimeout(() => setScanResult(null), 4000);
-    } finally {
       setScanning(false);
+      setScanResult(String(e) || t("dashboard.scanFailed"));
+      setTimeout(() => setScanResult(null), 4000);
     }
   };
 

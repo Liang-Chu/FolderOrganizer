@@ -1,7 +1,18 @@
-use tauri::State;
+use std::sync::atomic::Ordering;
+
+use tauri::{Emitter, State};
 
 use crate::scheduler;
 use super::AppState;
+
+#[derive(serde::Serialize, Clone)]
+struct ScanStatusEvent {
+    scope: String,
+    folder_id: Option<String>,
+    status: String,
+    count: Option<u32>,
+    error: Option<String>,
+}
 
 /// Opens a folder in the OS file explorer.
 #[tauri::command]
@@ -51,26 +62,142 @@ pub fn ensure_dir(path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn scan_now(state: State<AppState>) -> Result<u32, String> {
+pub fn scan_now(app: tauri::AppHandle, state: State<AppState>) -> Result<(), String> {
+    if state.scan_running.swap(true, Ordering::SeqCst) {
+        return Err("A scan is already running".to_string());
+    }
+
+    let _ = app.emit(
+        "scan-status",
+        ScanStatusEvent {
+            scope: "all".to_string(),
+            folder_id: None,
+            status: "started".to_string(),
+            count: None,
+            error: None,
+        },
+    );
+
     // Clone the config so we don't hold the mutex lock during the entire scan
-    let config = {
-        let guard = state.config.lock().map_err(|e| e.to_string())?;
-        guard.clone()
+    let config = match state.config.lock() {
+        Ok(guard) => guard.clone(),
+        Err(e) => {
+            state.scan_running.store(false, Ordering::SeqCst);
+            return Err(e.to_string());
+        }
     };
-    let count = scheduler::scan_existing_files(&config, &state.db);
-    Ok(count)
+    let db = state.db.clone();
+    let scan_running = state.scan_running.clone();
+
+    std::thread::spawn(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            scheduler::scan_existing_files(&config, &db)
+        }));
+
+        match result {
+            Ok(count) => {
+                let _ = app.emit(
+                    "scan-status",
+                    ScanStatusEvent {
+                        scope: "all".to_string(),
+                        folder_id: None,
+                        status: "finished".to_string(),
+                        count: Some(count),
+                        error: None,
+                    },
+                );
+                let _ = app.emit("dashboard-data-changed", ());
+            }
+            Err(_) => {
+                let _ = app.emit(
+                    "scan-status",
+                    ScanStatusEvent {
+                        scope: "all".to_string(),
+                        folder_id: None,
+                        status: "failed".to_string(),
+                        count: None,
+                        error: Some("Scan panicked".to_string()),
+                    },
+                );
+            }
+        }
+
+        scan_running.store(false, Ordering::SeqCst);
+    });
+
+    Ok(())
 }
 
 /// Scan a single folder for existing files and evaluate rules.
 /// Returns the number of files processed.
 #[tauri::command]
-pub fn scan_folder(state: State<AppState>, folder_id: String) -> Result<u32, String> {
-    let config = {
-        let guard = state.config.lock().map_err(|e| e.to_string())?;
-        guard.clone()
+pub fn scan_folder(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    folder_id: String,
+) -> Result<(), String> {
+    if state.scan_running.swap(true, Ordering::SeqCst) {
+        return Err("A scan is already running".to_string());
+    }
+
+    let _ = app.emit(
+        "scan-status",
+        ScanStatusEvent {
+            scope: "folder".to_string(),
+            folder_id: Some(folder_id.clone()),
+            status: "started".to_string(),
+            count: None,
+            error: None,
+        },
+    );
+
+    let config = match state.config.lock() {
+        Ok(guard) => guard.clone(),
+        Err(e) => {
+            state.scan_running.store(false, Ordering::SeqCst);
+            return Err(e.to_string());
+        }
     };
-    let count = scheduler::scan_single_folder(&config, &state.db, &folder_id);
-    Ok(count)
+    let db = state.db.clone();
+    let scan_running = state.scan_running.clone();
+
+    std::thread::spawn(move || {
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            scheduler::scan_single_folder(&config, &db, &folder_id)
+        }));
+
+        match result {
+            Ok(count) => {
+                let _ = app.emit(
+                    "scan-status",
+                    ScanStatusEvent {
+                        scope: "folder".to_string(),
+                        folder_id: Some(folder_id.clone()),
+                        status: "finished".to_string(),
+                        count: Some(count),
+                        error: None,
+                    },
+                );
+                let _ = app.emit("dashboard-data-changed", ());
+            }
+            Err(_) => {
+                let _ = app.emit(
+                    "scan-status",
+                    ScanStatusEvent {
+                        scope: "folder".to_string(),
+                        folder_id: Some(folder_id.clone()),
+                        status: "failed".to_string(),
+                        count: None,
+                        error: Some("Scan panicked".to_string()),
+                    },
+                );
+            }
+        }
+
+        scan_running.store(false, Ordering::SeqCst);
+    });
+
+    Ok(())
 }
 
 #[tauri::command]

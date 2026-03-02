@@ -13,7 +13,9 @@ import {
   ChevronUp,
   ListChecks,
   Copy,
+  RefreshCw,
 } from "lucide-react";
+import { listen } from "@tauri-apps/api/event";
 import { open, message, confirm } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
 import type { WatchedFolder, Rule, RuleExecutionStats } from "../types";
@@ -23,6 +25,13 @@ import { RuleListItem } from "./rules/RuleListItem";
 import { ImportRulesModal } from "./rules/ImportRulesModal";
 
 type ExpandedSection = "rules" | "whitelist" | null;
+type ScanStatusEvent = {
+  scope: "all" | "folder";
+  folder_id: string | null;
+  status: "started" | "finished" | "failed";
+  count?: number;
+  error?: string | null;
+};
 
 export default function Folders() {
   const { t } = useTranslation();
@@ -56,6 +65,7 @@ export default function Folders() {
 
   // Rule execution stats per folder (keyed by folder id -> rule name -> stats)
   const [ruleStats, setRuleStats] = useState<Record<string, Record<string, RuleExecutionStats>>>({});
+  const [scanningFolders, setScanningFolders] = useState<Record<string, boolean>>({});
 
   const loadFolders = async () => {
     try {
@@ -88,6 +98,31 @@ export default function Folders() {
         setDefaultSortRoot(cfg.settings.default_sort_root);
       }
     });
+
+    const unlistenScan = listen<ScanStatusEvent>("scan-status", (event) => {
+      const payload = event.payload;
+      if (payload.scope !== "folder" || !payload.folder_id) return;
+
+      const folderId = payload.folder_id;
+      if (payload.status === "started") {
+        setScanningFolders((prev) => ({ ...prev, [folderId]: true }));
+        return;
+      }
+
+      setScanningFolders((prev) => ({ ...prev, [folderId]: false }));
+      loadFolders();
+
+      if (payload.status === "failed") {
+        message(payload.error || "Folder scan failed", {
+          title: t("common.error"),
+          kind: "error",
+        }).catch(() => {});
+      }
+    });
+
+    return () => {
+      unlistenScan.then((fn) => fn());
+    };
   }, []);
 
   // Auto-expand folder from query param (e.g. right-click "Watch with Folder Organizer")
@@ -230,9 +265,12 @@ export default function Folders() {
     //   (backend already recalculated scheduled deletion dates)
     try {
       await api.scanFolder(folderId);
-      await loadFolders(); // Reload to pick up updated stats
     } catch (e) {
       console.error("Scan after rule save failed:", e);
+      message(String(e ?? "Scan failed"), {
+        title: t("common.error"),
+        kind: "error",
+      }).catch(() => {});
     }
   };
 
@@ -405,13 +443,21 @@ export default function Folders() {
                 {/* Folder header */}
                 <div className="px-5 py-3 flex items-center gap-3">
                   <div className="min-w-0 flex-1">
-                    <button
-                      type="button"
-                      onClick={(e) => handleOpenFolderPath(folder.path, e)}
-                      className="text-sm font-medium text-left text-zinc-200 hover:text-blue-300 focus:outline-none inline-flex max-w-full p-0"
-                    >
-                      <span className="truncate">{folder.path}</span>
-                    </button>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenFolderPath(folder.path, e)}
+                        className="text-sm font-medium text-left text-zinc-200 hover:text-blue-300 focus:outline-none inline-flex max-w-full p-0"
+                      >
+                        <span className="truncate">{folder.path}</span>
+                      </button>
+                      {scanningFolders[folder.id] && (
+                        <span className="inline-flex items-center gap-1 text-xs text-zinc-400 flex-shrink-0">
+                          <RefreshCw size={12} className="animate-spin" />
+                          {t("folders.scanning")}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Section tabs */}
@@ -429,6 +475,9 @@ export default function Folders() {
                       ? <ChevronUp size={14} className="ml-0.5" />
                       : <ChevronDown size={14} className="ml-0.5" />
                     }
+                    {scanningFolders[folder.id] && (
+                      <RefreshCw size={13} className="ml-1 animate-spin" />
+                    )}
                   </button>
                   <button
                     onClick={() => toggleSection(folder.id, "whitelist")}

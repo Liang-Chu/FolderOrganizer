@@ -36,45 +36,14 @@ pub fn run() {
         config: config_arc.clone(),
         db: db_arc.clone(),
         watcher: Arc::new(Mutex::new(file_watcher)),
+        scan_running: Arc::new(std::sync::atomic::AtomicBool::new(false)),
     };
-
-    // Start periodic scheduler in background (maintenance + daily deletion check)
-    let scheduler_config = config_arc.clone();
-    let scheduler_db = db_arc.clone();
-    std::thread::spawn(move || {
-        let mut last_deletion_day: Option<u32> = None;
-        loop {
-            let (interval, deletion_hour) = {
-                let cfg = scheduler_config.lock().unwrap();
-                // Enforce minimum 1 minute interval
-                (cfg.settings.scan_interval_minutes.max(1), cfg.settings.deletion_time_hour)
-            };
-            std::thread::sleep(std::time::Duration::from_secs(
-                (interval as u64) * 60,
-            ));
-
-            // Run maintenance (log pruning, undo cleanup, storage enforcement)
-            {
-                let cfg = scheduler_config.lock().unwrap();
-                scheduler::run_scheduled_cleanup(&cfg, &scheduler_db);
-            }
-
-            // Check if it's time to run daily deletions
-            let now = chrono::Local::now();
-            let today = now.format("%j").to_string().parse::<u32>().unwrap_or(0); // day of year
-            let current_hour = now.hour();
-
-            if current_hour >= deletion_hour && last_deletion_day != Some(today) {
-                log::info!("Running daily scheduled deletions (hour: {}, configured: {})", current_hour, deletion_hour);
-                scheduler::process_due_deletions(&scheduler_db);
-                last_deletion_day = Some(today);
-            }
-        }
-    });
 
     let tray_config = config_arc.clone();
     let cli_config = config_arc.clone();
     let single_instance_config = config_arc.clone();
+    let scheduler_config = config_arc.clone();
+    let scheduler_db = db_arc.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -175,6 +144,45 @@ pub fn run() {
             commands::get_db_path,
         ])
         .setup(move |app| {
+            // ── Start periodic scheduler (maintenance + daily deletion check) ──
+            {
+                let scheduler_config = scheduler_config.clone();
+                let scheduler_db = scheduler_db.clone();
+                let app_handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let mut last_deletion_day: Option<u32> = None;
+                    loop {
+                        let (interval, deletion_hour) = {
+                            let cfg = scheduler_config.lock().unwrap();
+                            // Enforce minimum 1 minute interval
+                            (cfg.settings.scan_interval_minutes.max(1), cfg.settings.deletion_time_hour)
+                        };
+                        std::thread::sleep(std::time::Duration::from_secs(
+                            (interval as u64) * 60,
+                        ));
+
+                        // Run maintenance (log pruning, undo cleanup, storage enforcement)
+                        {
+                            let cfg = scheduler_config.lock().unwrap();
+                            scheduler::run_scheduled_cleanup(&cfg, &scheduler_db);
+                        }
+
+                        // Check if it's time to run daily deletions
+                        let now = chrono::Local::now();
+                        let today = now.format("%j").to_string().parse::<u32>().unwrap_or(0); // day of year
+                        let current_hour = now.hour();
+
+                        if current_hour >= deletion_hour && last_deletion_day != Some(today) {
+                            log::info!("Running daily scheduled deletions (hour: {}, configured: {})", current_hour, deletion_hour);
+                            let cfg = scheduler_config.lock().unwrap().clone();
+                            scheduler::process_due_deletions_with_config(&scheduler_db, Some(&cfg));
+                            let _ = app_handle.emit("dashboard-data-changed", ());
+                            last_deletion_day = Some(today);
+                        }
+                    }
+                });
+            }
+
             // ── Sync autostart with config on launch ──
             {
                 use tauri_plugin_autostart::ManagerExt;

@@ -7,6 +7,7 @@ mod rules;
 mod watcher_cmds;
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 
 use crate::config::AppConfig;
 use crate::db::Database;
@@ -16,6 +17,7 @@ pub struct AppState {
     pub config: Arc<Mutex<AppConfig>>,
     pub db: Arc<Database>,
     pub watcher: Arc<Mutex<FileWatcher>>,
+    pub scan_running: Arc<AtomicBool>,
 }
 
 // ── Re-exports ──────────────────────────────────────────────

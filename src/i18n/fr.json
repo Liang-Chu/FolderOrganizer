@@ -54,6 +54,7 @@
     "selectFolder": "Sélectionner un dossier à surveiller",
     "folderAdded": "Dossier ajouté",
     "failedToAdd": "Échec de l'ajout du dossier",
+    "scanning": "Analyse…",
     "whitelist": "Liste blanche du dossier",
     "whitelistDesc": "Les fichiers correspondant à ces motifs ne seront jamais traités par les règles de ce dossier.",
     "whitelistCount": "{{count}} en liste blanche",

@@ -117,8 +117,22 @@ pub fn delete_rule(
         .iter_mut()
         .find(|f| f.id == folder_id)
         .ok_or("Folder not found")?;
+
+    let removed_rule_name = folder
+        .rules
+        .iter()
+        .find(|r| r.id() == rule_id)
+        .map(|r| r.name.clone());
+
     folder.rules.retain(|r| r.id() != rule_id);
     config::save_config(&config)?;
+
+    if let Some(rule_name) = removed_rule_name {
+        let _ = state
+            .db
+            .remove_scheduled_deletions_by_rule(&folder_id, &rule_name);
+    }
+
     let _ = state.db.delete_rule_metadata(&rule_id, &folder_id);
     Ok(())
 }

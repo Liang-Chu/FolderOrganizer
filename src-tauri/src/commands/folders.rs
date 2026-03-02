@@ -46,6 +46,7 @@ pub fn remove_watched_folder(state: State<AppState>, folder_id: String) -> Resul
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.folders.retain(|f| f.id != folder_id);
     config::save_config(&config)?;
+    let _ = state.db.remove_scheduled_deletions_by_folder(&folder_id);
     Ok(())
 }
 

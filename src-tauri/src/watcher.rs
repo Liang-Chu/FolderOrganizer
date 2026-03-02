@@ -106,31 +106,55 @@ fn handle_file_event(
     });
 
     if let Some(folder) = folder {
-        if let Some(result) = rules::evaluate_file(file_path, folder, db) {
-            let now = chrono::Utc::now()
-                .format("%Y-%m-%d %H:%M:%S")
-                .to_string();
-            let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
 
-            let _ = db.insert_activity(
-                &id,
-                &result.file_path,
-                &result.file_name,
-                &result.action,
-                Some(&result.rule_name),
-                Some(&folder.id),
-                &now,
-                if result.success { "success" } else { "error" },
-                result.details.as_deref(),
-            );
+        match rules::evaluate_file_full(file_path, folder, db) {
+            rules::EvalOutcome::Action(result) => {
+                let id = uuid::Uuid::new_v4().to_string();
+                let _ = db.insert_activity(
+                    &id,
+                    &result.file_path,
+                    &result.file_name,
+                    &result.action,
+                    Some(&result.rule_name),
+                    Some(&folder.id),
+                    &now,
+                    if result.success { "success" } else { "error" },
+                    result.details.as_deref(),
+                );
 
-            log::info!(
-                "[{}] {} → {} ({})",
-                if result.success { "OK" } else { "ERR" },
-                result.file_name,
-                result.action,
-                result.rule_name
-            );
+                log::info!(
+                    "[{}] {} → {} ({})",
+                    if result.success { "OK" } else { "ERR" },
+                    result.file_name,
+                    result.action,
+                    result.rule_name
+                );
+            }
+            rules::EvalOutcome::Scheduled {
+                file_path,
+                file_name,
+                rule_name,
+                newly_inserted,
+            } => {
+                if newly_inserted {
+                    let _ = db.insert_activity(
+                        &uuid::Uuid::new_v4().to_string(),
+                        &file_path,
+                        &file_name,
+                        "scheduled",
+                        Some(&rule_name),
+                        Some(&folder.id),
+                        &now,
+                        "success",
+                        Some("File scheduled for deletion"),
+                    );
+                    log::info!("[OK] {} → scheduled ({})", file_name, rule_name);
+                }
+            }
+            rules::EvalOutcome::NoMatch => {}
         }
     }
 }

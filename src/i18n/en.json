@@ -54,6 +54,7 @@
     "selectFolder": "Select folder to watch",
     "folderAdded": "Folder added",
     "failedToAdd": "Failed to add folder",
+    "scanning": "Scanning…",
     "whitelist": "Folder Whitelist",
     "whitelistDesc": "Files matching these patterns will never be processed by any rule in this folder.",
     "whitelistCount": "{{count}} whitelisted",

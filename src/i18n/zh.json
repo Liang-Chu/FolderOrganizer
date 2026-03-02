@@ -54,6 +54,7 @@
     "selectFolder": "选择要监控的文件夹",
     "folderAdded": "文件夹已添加",
     "failedToAdd": "添加文件夹失败",
+    "scanning": "扫描中…",
     "whitelist": "文件夹白名单",
     "whitelistDesc": "匹配这些模式的文件将不会被此文件夹中的任何规则处理。",
     "whitelistCount": "{{count}} 个白名单",

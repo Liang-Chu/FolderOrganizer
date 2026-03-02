@@ -50,10 +50,13 @@ pub fn run_scheduled_cleanup(
     log::info!("Scheduled cleanup completed at {}", now_str);
 }
 
-/// Process all due scheduled deletions (where delete_after <= now).
-/// Called either by the daily timer or manually by the user via `run_deletions`.
-/// Returns the number of files successfully deleted.
-pub fn process_due_deletions(db: &Database) -> u32 {
+/// Process due deletions with optional config validation.
+/// When config is provided, deletion only runs if the folder still exists,
+/// is enabled, and the matching delete rule is still enabled.
+pub fn process_due_deletions_with_config(
+    db: &Database,
+    config: Option<&AppConfig>,
+) -> u32 {
     let now = Utc::now();
     let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let mut count = 0u32;
@@ -61,6 +64,23 @@ pub fn process_due_deletions(db: &Database) -> u32 {
     match db.get_due_deletions(&now_str) {
         Ok(due) => {
             for entry in due {
+                if let Some(cfg) = config {
+                    let folder = cfg.folders.iter().find(|f| f.id == entry.folder_id);
+                    let should_run = match folder {
+                        Some(f) if f.enabled => f.rules.iter().any(|r| {
+                            r.is_enabled()
+                                && r.name == entry.rule_name
+                                && matches!(r.action, crate::config::Action::Delete { .. })
+                        }),
+                        _ => false,
+                    };
+
+                    if !should_run {
+                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                        continue;
+                    }
+                }
+
                 let path = Path::new(&entry.file_path);
                 if path.exists() {
                     let success = safe_delete(path, db, &now_str);

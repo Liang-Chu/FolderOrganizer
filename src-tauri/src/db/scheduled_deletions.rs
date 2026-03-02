@@ -127,6 +127,15 @@ impl Database {
         )
     }
 
+    /// Remove all scheduled deletions for a folder.
+    pub fn remove_scheduled_deletions_by_folder(&self, folder_id: &str) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "DELETE FROM scheduled_deletions WHERE folder_id = ?1",
+            params![folder_id],
+        )
+    }
+
     /// Update the delete_after timestamp for all scheduled deletions of a specific rule in a folder.
     /// Recalculates delete_after = scheduled_at + new after_days.
     pub fn update_scheduled_deletion_days(
