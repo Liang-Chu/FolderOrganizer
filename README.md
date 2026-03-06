@@ -3,18 +3,22 @@
 A lightweight desktop application that monitors user-configured folders and automatically organizes files based on composable rules.
 
 ## Features
+### What it does 
 
-- **Auto-move** files based on glob/regex conditions to organized directories
-- **Auto-delete** files after a configurable delay (safe-delete with 7-day undo)
-- **Composable rule engine** — combine conditions with AND/OR/NOT operators
-- **Folder & rule-level whitelists** — protect files from being processed
-- **Recursive or top-level** folder watching per folder
-- **System tray** with minimize-to-tray support
-- **Auto-start with Windows**
-- **Activity log** with paginated history and undo for deletions
-- **Scheduled deletions** run daily at a configurable hour
-- **Config import/export** for backup and sharing
-- **Multi-language** UI (English, French, Mandarin)
+- **Auto-move/delete** files based on rules that can be set up in seconds!
+![alt text](image-1.png)
+- **Match testing** Not sure if a file/folder name matches the condition? Easy way to confirm it!
+![alt text](image.png)
+
+- **Log all changes done/will be done** Logs stored in a local SQLite database. And you will be able to see all the files scheduled for moving/deletion.
+![alt text](image-2.png)
+- **Full control of updates**. You own your system, feel free to choose between silent auto-update, update with confirmation, and version freeze.
+![alt text](image-3.png)
+
+### What it doesn't do
+- **Steal your data**: All data is stored locally. The only time it needs internet access is checking for updates, and you can turn that off.
+- **Modify without logging**: All file operations are logged.
+- **Affect whitelisted items**: Files/folders on the whitelist are never modified by rules.
 
 ## Tech Stack
 
@@ -77,4 +81,4 @@ All data is stored locally in `%APPDATA%/folder-organizer/`:
 
 ## License
 
-Private project.
+[MIT](LICENSE)
