@@ -2,6 +2,10 @@
 
 A lightweight desktop application that monitors user-configured folders and automatically organizes files based on composable rules.
 
+[![Download Latest Release](https://img.shields.io/github/v/release/Liang-Chu/FolderOrganizer?label=Download&style=for-the-badge)](https://github.com/Liang-Chu/FolderOrganizer/releases/latest)
+
+> **Windows only** — available as `.msi` and `.exe` (NSIS) installers.
+
 ## Features
 ### What it does 
 
