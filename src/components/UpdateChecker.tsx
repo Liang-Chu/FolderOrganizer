@@ -7,6 +7,8 @@ import { currentMonitor } from "@tauri-apps/api/window";
 import { Download, X, RefreshCw, CheckCircle } from "lucide-react";
 import * as api from "../api";
 
+const IS_DEV = import.meta.env.DEV;
+
 type UpdateState =
   | { status: "idle" }
   | { status: "checking" }
@@ -50,6 +52,7 @@ export function UpdateChecker() {
   }, []);
 
   useEffect(() => {
+    if (IS_DEV) return;
     if (updateMode === 'off') return;
     const timer = setTimeout(() => checkForUpdate(), 5000);
     const interval = setInterval(() => checkForUpdate(),  15 * 60 * 1000);
@@ -94,6 +97,7 @@ export function UpdateChecker() {
   };
 
   const installUpdateFromRef = async (update: Update) => {
+    if (IS_DEV) return;
     try {
       setState({ status: "downloading", progress: 0 });
       setDismissed(false);
@@ -123,6 +127,7 @@ export function UpdateChecker() {
   };
 
   const checkForUpdate = async () => {
+    if (IS_DEV) return;
     try {
       setState({ status: "checking" });
       const update = await check();
@@ -171,6 +176,7 @@ export function UpdateChecker() {
   };
 
   const installUpdate = async () => {
+    if (IS_DEV) return;
     if (state.status !== "available") return;
     const { update } = state;
     try {

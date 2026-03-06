@@ -1,4 +1,5 @@
 use std::fs;
+use std::collections::HashSet;
 use std::path::Path;
 
 use chrono::Utc;
@@ -50,9 +51,8 @@ pub fn run_scheduled_cleanup(
     log::info!("Scheduled cleanup completed at {}", now_str);
 }
 
-/// Process due deletions with optional config validation.
-/// When config is provided, deletion only runs if the folder still exists,
-/// is enabled, and the matching delete rule is still enabled.
+/// Process due scheduled actions with optional config validation.
+/// Handles both scheduled deletions and scheduled moves.
 pub fn process_due_deletions_with_config(
     db: &Database,
     config: Option<&AppConfig>,
@@ -70,7 +70,11 @@ pub fn process_due_deletions_with_config(
                         Some(f) if f.enabled => f.rules.iter().any(|r| {
                             r.is_enabled()
                                 && r.name == entry.rule_name
-                                && matches!(r.action, crate::config::Action::Delete { .. })
+                                && match (&r.action, entry.action_type.as_str()) {
+                                    (crate::config::Action::Delete { .. }, "delete") => true,
+                                    (crate::config::Action::Move { .. }, "move") => true,
+                                    _ => false,
+                                }
                         }),
                         _ => false,
                     };
@@ -82,51 +86,293 @@ pub fn process_due_deletions_with_config(
                 }
 
                 let path = Path::new(&entry.file_path);
-                if path.exists() {
-                    let success = safe_delete(path, db, &now_str);
-                    // Log the actual deletion to activity_log
-                    let _ = db.insert_activity(
-                        &Uuid::new_v4().to_string(),
-                        &entry.file_path,
-                        &entry.file_name,
-                        "auto_delete",
-                        Some(&entry.rule_name),
-                        Some(&entry.folder_id),
-                        &now_str,
-                        if success { "success" } else { "error" },
-                        if success {
-                            Some("File sent to Recycle Bin")
-                        } else {
-                            Some("Failed to delete file")
-                        },
-                    );
-                    if success {
-                        count += 1;
-                        // Only remove scheduled_deletion if deletion succeeded
-                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
-                    }
-                    // If deletion failed, keep scheduled_deletion for retry
+                if !path.exists() {
+                    let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                    continue;
+                }
+
+                let is_move = entry.action_type == "move";
+                let success = if is_move {
+                    execute_scheduled_move(path, &entry, db, &now_str)
                 } else {
-                    // File no longer exists, remove scheduled_deletion
+                    safe_delete(path, db, &now_str, "auto_delete")
+                };
+
+                let action_label = if is_move {
+                    if entry.keep_source { "auto_copy" } else { "auto_move" }
+                } else {
+                    "auto_delete"
+                };
+                let detail = if is_move {
+                    let verb = if entry.keep_source { "copied" } else { "moved" };
+                    if success {
+                        format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?"))
+                    } else {
+                        format!("Failed to {} file", if entry.keep_source { "copy" } else { "move" })
+                    }
+                } else if success {
+                    "File sent to Recycle Bin".to_string()
+                } else {
+                    "Failed to delete file".to_string()
+                };
+
+                let _ = db.insert_activity(
+                    &Uuid::new_v4().to_string(),
+                    &entry.file_path,
+                    &entry.file_name,
+                    action_label,
+                    Some(&entry.rule_name),
+                    Some(&entry.folder_id),
+                    &now_str,
+                    if success { "success" } else { "error" },
+                    Some(&detail),
+                );
+                if success {
+                    count += 1;
                     let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
                 }
             }
         }
         Err(e) => {
-            log::error!("Failed to query due deletions: {}", e);
+            log::error!("Failed to query due scheduled actions: {}", e);
         }
     }
 
     if count > 0 {
-        log::info!("Processed {} due deletions", count);
+        log::info!("Processed {} due scheduled actions", count);
+    }
+    count
+}
+
+/// Execute a scheduled move action.
+fn execute_scheduled_move(
+    file_path: &Path,
+    entry: &crate::db::ScheduledDeletion,
+    db: &Database,
+    now_str: &str,
+) -> bool {
+    let destination_str = match &entry.move_destination {
+        Some(d) => d.clone(),
+        None => {
+            log::error!("Scheduled move for {} has no destination", entry.file_path);
+            return false;
+        }
+    };
+    let destination = Path::new(&destination_str);
+    if let Err(e) = fs::create_dir_all(destination) {
+        log::error!("Failed to create destination {}: {}", destination.display(), e);
+        return false;
+    }
+
+    let file_name = file_path.file_name().unwrap_or_default();
+    let dest_file = destination.join(file_name);
+    let final_dest = if dest_file.exists() {
+        let stem = file_path.file_stem().unwrap_or_default().to_string_lossy();
+        let ext_str = if file_path.is_file() {
+            file_path.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default()
+        } else {
+            String::new()
+        };
+        let mut counter = 1;
+        loop {
+            let candidate = destination.join(format!("{} ({}){}", stem, counter, ext_str));
+            if !candidate.exists() {
+                break candidate;
+            }
+            counter += 1;
+        }
+    } else {
+        dest_file
+    };
+
+    let keep_source = entry.keep_source;
+    let undo_action = if keep_source { "auto_copy" } else { "auto_move" };
+
+    // Copy mode: always copy, never remove source
+    if keep_source {
+        let copy_result = if file_path.is_dir() {
+            crate::rules::copy_dir_recursive(file_path, &final_dest).map(|_| ())
+        } else {
+            fs::copy(file_path, &final_dest).map(|_| ())
+        };
+        return match copy_result {
+            Ok(_) => {
+                let expires = Utc::now() + chrono::Duration::days(7);
+                let _ = db.insert_undo(
+                    &Uuid::new_v4().to_string(),
+                    &file_path.to_string_lossy(),
+                    Some(&final_dest.to_string_lossy()),
+                    undo_action,
+                    now_str,
+                    &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
+                );
+                true
+            }
+            Err(e) => {
+                log::error!("Failed to copy {}: {}", file_path.display(), e);
+                false
+            }
+        };
+    }
+
+    // Cut mode: try rename first, fallback to copy + delete
+    match fs::rename(file_path, &final_dest) {
+        Ok(_) => {
+            let expires = Utc::now() + chrono::Duration::days(7);
+            let _ = db.insert_undo(
+                &Uuid::new_v4().to_string(),
+                &file_path.to_string_lossy(),
+                Some(&final_dest.to_string_lossy()),
+                undo_action,
+                now_str,
+                &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
+            );
+            true
+        }
+        Err(_) => {
+            if file_path.is_dir() {
+                match crate::rules::copy_dir_recursive(file_path, &final_dest) {
+                    Ok(_) => {
+                        if let Err(rm_err) = fs::remove_dir_all(file_path) {
+                            log::warn!("Copied dir to {} but failed to remove source: {}", final_dest.display(), rm_err);
+                        }
+                        let expires = Utc::now() + chrono::Duration::days(7);
+                        let _ = db.insert_undo(
+                            &Uuid::new_v4().to_string(),
+                            &file_path.to_string_lossy(),
+                            Some(&final_dest.to_string_lossy()),
+                            undo_action,
+                            now_str,
+                            &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        );
+                        true
+                    }
+                    Err(e) => {
+                        log::error!("Failed to move dir {}: {}", file_path.display(), e);
+                        false
+                    }
+                }
+            } else {
+                // Cross-device: try copy + delete
+                match fs::copy(file_path, &final_dest) {
+                    Ok(_) => {
+                        if let Err(rm_err) = fs::remove_file(file_path) {
+                            log::warn!("Copied file to {} but failed to remove source: {}", final_dest.display(), rm_err);
+                        }
+                        let expires = Utc::now() + chrono::Duration::days(7);
+                        let _ = db.insert_undo(
+                            &Uuid::new_v4().to_string(),
+                            &file_path.to_string_lossy(),
+                            Some(&final_dest.to_string_lossy()),
+                            undo_action,
+                            now_str,
+                            &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
+                        );
+                        true
+                    }
+                    Err(e) => {
+                        log::error!("Failed to move {}: {}", file_path.display(), e);
+                        false
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Immediately process selected scheduled actions by IDs (ignores due date).
+/// Handles both deletions and moves. Returns the number of files successfully processed.
+pub fn process_selected_deletions_now(
+    db: &Database,
+    deletion_ids: &[String],
+) -> u32 {
+    if deletion_ids.is_empty() {
+        return 0;
+    }
+
+    let selected: HashSet<&str> = deletion_ids.iter().map(String::as_str).collect();
+    let now = Utc::now();
+    let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
+    let mut count = 0u32;
+
+    match db.get_scheduled_deletions() {
+        Ok(all) => {
+            for entry in all.into_iter().filter(|e| selected.contains(e.id.as_str())) {
+                let path = Path::new(&entry.file_path);
+                let is_move = entry.action_type == "move";
+
+                if path.exists() {
+                    let success = if is_move {
+                        execute_scheduled_move(path, &entry, db, &now_str)
+                    } else {
+                        safe_delete(path, db, &now_str, "manual_delete_now")
+                    };
+
+                    let action_label = if is_move {
+                        if entry.keep_source { "manual_copy_now" } else { "manual_move_now" }
+                    } else {
+                        "manual_delete_now"
+                    };
+                    let detail = if is_move {
+                        let verb = if entry.keep_source { "copied" } else { "moved" };
+                        if success {
+                            format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?"))
+                        } else {
+                            format!("Failed to {} file", if entry.keep_source { "copy" } else { "move" })
+                        }
+                    } else if success {
+                        "File deleted immediately from scheduled list".to_string()
+                    } else {
+                        "Failed to delete file".to_string()
+                    };
+
+                    let _ = db.insert_activity(
+                        &Uuid::new_v4().to_string(),
+                        &entry.file_path,
+                        &entry.file_name,
+                        action_label,
+                        Some(&entry.rule_name),
+                        Some(&entry.folder_id),
+                        &now_str,
+                        if success { "success" } else { "error" },
+                        Some(&detail),
+                    );
+
+                    if success {
+                        count += 1;
+                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                    }
+                } else {
+                    let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                    let _ = db.insert_activity(
+                        &Uuid::new_v4().to_string(),
+                        &entry.file_path,
+                        &entry.file_name,
+                        if is_move { "manual_move_now" } else { "manual_delete_now" },
+                        Some(&entry.rule_name),
+                        Some(&entry.folder_id),
+                        &now_str,
+                        "error",
+                        Some("File no longer exists; removed from scheduled list"),
+                    );
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("Failed to query scheduled deletions: {}", e);
+        }
+    }
+
+    if count > 0 {
+        log::info!("Processed {} immediate selected actions", count);
     }
     count
 }
 
 /// Scan all enabled folders for existing files and evaluate rules.
 /// This handles files that were added while the app was not running.
-/// Delete rules log a "scheduled" activity entry so that "last run" stats update.
-/// Move rules execute immediately and log to activity.
+/// Scheduled actions (delete/move with delay) log a "scheduled" activity entry.
+/// Immediate actions (move without delay) execute and log to activity.
 /// Returns the number of files processed (matched by any rule).
 pub fn scan_existing_files(
     config: &AppConfig,
@@ -166,9 +412,18 @@ pub fn scan_existing_files(
                     );
                     total_processed += 1;
                 }
-                Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted }) => {
+                Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted, action_type, details }) => {
                     // Only log activity for newly scheduled files (avoid spam on re-scans)
                     if newly_inserted {
+                        let base = if action_type.contains("move") {
+                            "File scheduled for move"
+                        } else {
+                            "File scheduled for deletion"
+                        };
+                        let detail = match details {
+                            Some(ref d) => format!("{} {}", base, d),
+                            None => base.to_string(),
+                        };
                         let _ = db.insert_activity(
                             &Uuid::new_v4().to_string(),
                             &file_path,
@@ -178,7 +433,7 @@ pub fn scan_existing_files(
                             Some(&folder.id),
                             &now_str,
                             "success",
-                            Some("File scheduled for deletion"),
+                            Some(&detail),
                         );
                     }
                     total_processed += 1;
@@ -241,8 +496,17 @@ pub fn scan_single_folder(
                 );
                 total_processed += 1;
             }
-            Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted }) => {
+            Ok(crate::rules::EvalOutcome::Scheduled { file_path, file_name, rule_name, newly_inserted, action_type, details }) => {
                 if newly_inserted {
+                    let base = if action_type.contains("move") {
+                        "File scheduled for move"
+                    } else {
+                        "File scheduled for deletion"
+                    };
+                    let detail = match details {
+                        Some(ref d) => format!("{} {}", base, d),
+                        None => base.to_string(),
+                    };
                     let _ = db.insert_activity(
                         &Uuid::new_v4().to_string(),
                         &file_path,
@@ -252,7 +516,7 @@ pub fn scan_single_folder(
                         Some(&folder.id),
                         &now_str,
                         "success",
-                        Some("File scheduled for deletion"),
+                        Some(&detail),
                     );
                 }
                 total_processed += 1;
@@ -293,15 +557,19 @@ fn collect_files_inner(dir: &Path, recursive: bool, files: &mut Vec<std::path::P
         let path = entry.path();
         if path.is_file() {
             files.push(path);
-        } else if recursive && path.is_dir() {
-            collect_files_inner(&path, true, files);
+        } else if path.is_dir() {
+            // Always include child directories as entries so folder-name rules can match them
+            files.push(path.clone());
+            if recursive {
+                collect_files_inner(&path, true, files);
+            }
         }
     }
 }
 
 /// Safe delete: send file to the OS recycle bin.
 /// Returns true on success.
-fn safe_delete(file_path: &Path, db: &Database, now_str: &str) -> bool {
+fn safe_delete(file_path: &Path, db: &Database, now_str: &str, undo_action: &str) -> bool {
     match trash::delete(file_path) {
         Ok(_) => {
             // Undo expires in 7 days (user can restore from Recycle Bin)
@@ -310,7 +578,7 @@ fn safe_delete(file_path: &Path, db: &Database, now_str: &str) -> bool {
                 &Uuid::new_v4().to_string(),
                 &file_path.to_string_lossy(),
                 None, // no staged path — it's in the OS recycle bin
-                "auto_delete",
+                undo_action,
                 now_str,
                 &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
             );

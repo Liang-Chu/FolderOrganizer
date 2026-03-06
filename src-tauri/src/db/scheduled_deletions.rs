@@ -4,8 +4,10 @@ use super::models::ScheduledDeletion;
 use super::Database;
 
 impl Database {
-    /// Insert or update a scheduled deletion. If the file is already scheduled,
-    /// this is a no-op (keeps the original schedule).
+    /// Insert or update a scheduled action. If the file is already scheduled
+    /// under the *same* rule, this is a no-op (keeps the original schedule).
+    /// If the file is scheduled under a *different* rule (e.g. rule priority
+    /// changed), the entry is updated to reflect the new rule.
     pub fn upsert_scheduled_deletion(
         &self,
         id: &str,
@@ -17,20 +19,31 @@ impl Database {
         size_bytes: Option<i64>,
         scheduled_at: &str,
         delete_after: &str,
+        action_type: &str,
+        move_destination: Option<&str>,
+        keep_source: bool,
     ) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        // Only insert if file_path doesn't already exist (ignore on conflict)
         let rows = conn.execute(
-            "INSERT INTO scheduled_deletions (id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-             ON CONFLICT(file_path) DO NOTHING",
-            params![id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after],
+            "INSERT INTO scheduled_deletions (id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after, action_type, move_destination, keep_source)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+             ON CONFLICT(file_path) DO UPDATE SET
+               rule_name = excluded.rule_name,
+               action_type = excluded.action_type,
+               move_destination = excluded.move_destination,
+               keep_source = excluded.keep_source,
+               delete_after = excluded.delete_after,
+               scheduled_at = excluded.scheduled_at,
+               folder_id = excluded.folder_id
+             WHERE scheduled_deletions.rule_name != excluded.rule_name
+                OR scheduled_deletions.action_type != excluded.action_type
+                OR COALESCE(scheduled_deletions.folder_id, '') != COALESCE(excluded.folder_id, '')",
+            params![id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after, action_type, move_destination, keep_source],
         )?;
-        // rows == 1 means newly inserted, 0 means it already existed
         Ok(rows > 0)
     }
 
-    /// Check whether a file is already scheduled for deletion.
+    /// Check whether a file is already scheduled.
     #[allow(dead_code)]
     pub fn is_file_scheduled(&self, file_path: &str) -> bool {
         let conn = self.conn.lock().unwrap();
@@ -44,11 +57,12 @@ impl Database {
         count > 0
     }
 
-    /// Get all scheduled deletions (ordered by delete_after ascending).
+    /// Get all scheduled actions (ordered by delete_after ascending).
     pub fn get_scheduled_deletions(&self) -> Result<Vec<ScheduledDeletion>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after
+            "SELECT id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after,
+                    COALESCE(action_type, 'delete'), move_destination, COALESCE(keep_source, 0)
              FROM scheduled_deletions ORDER BY delete_after ASC",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -62,6 +76,9 @@ impl Database {
                 size_bytes: row.get(6)?,
                 scheduled_at: row.get(7)?,
                 delete_after: row.get(8)?,
+                action_type: row.get(9)?,
+                move_destination: row.get(10)?,
+                keep_source: row.get::<_, i32>(11).unwrap_or(0) != 0,
             })
         })?;
         let mut entries = Vec::new();
@@ -71,11 +88,12 @@ impl Database {
         Ok(entries)
     }
 
-    /// Get scheduled deletions whose delete_after time has passed.
+    /// Get scheduled actions whose execute time has passed.
     pub fn get_due_deletions(&self, now: &str) -> Result<Vec<ScheduledDeletion>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after
+            "SELECT id, file_path, folder_id, rule_name, file_name, extension, size_bytes, scheduled_at, delete_after,
+                    COALESCE(action_type, 'delete'), move_destination, COALESCE(keep_source, 0)
              FROM scheduled_deletions WHERE delete_after <= ?1 ORDER BY delete_after ASC",
         )?;
         let rows = stmt.query_map(params![now], |row| {
@@ -89,6 +107,9 @@ impl Database {
                 size_bytes: row.get(6)?,
                 scheduled_at: row.get(7)?,
                 delete_after: row.get(8)?,
+                action_type: row.get(9)?,
+                move_destination: row.get(10)?,
+                keep_source: row.get::<_, i32>(11).unwrap_or(0) != 0,
             })
         })?;
         let mut entries = Vec::new();
@@ -98,7 +119,7 @@ impl Database {
         Ok(entries)
     }
 
-    /// Remove a scheduled deletion by ID (cancel it).
+    /// Remove a scheduled action by ID (cancel it).
     pub fn cancel_scheduled_deletion(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -108,7 +129,7 @@ impl Database {
         Ok(())
     }
 
-    /// Remove a scheduled deletion by file path.
+    /// Remove a scheduled action by file path.
     pub fn remove_scheduled_deletion_by_path(&self, file_path: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -118,7 +139,7 @@ impl Database {
         Ok(())
     }
 
-    /// Remove all scheduled deletions for a specific rule in a folder.
+    /// Remove all scheduled actions for a specific rule in a folder.
     pub fn remove_scheduled_deletions_by_rule(&self, folder_id: &str, rule_name: &str) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -127,7 +148,7 @@ impl Database {
         )
     }
 
-    /// Remove all scheduled deletions for a folder.
+    /// Remove all scheduled actions for a folder.
     pub fn remove_scheduled_deletions_by_folder(&self, folder_id: &str) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
@@ -136,21 +157,20 @@ impl Database {
         )
     }
 
-    /// Update the delete_after timestamp for all scheduled deletions of a specific rule in a folder.
-    /// Recalculates delete_after = scheduled_at + new after_days.
-    pub fn update_scheduled_deletion_days(
+    /// Update the execute-after timestamp for all scheduled actions of a specific rule in a folder.
+    /// Recalculates delete_after = scheduled_at + new delay_minutes.
+    pub fn update_scheduled_deletion_delay(
         &self,
         folder_id: &str,
         rule_name: &str,
-        after_days: u32,
+        delay_minutes: u32,
     ) -> Result<usize> {
         let conn = self.conn.lock().unwrap();
-        // SQLite datetime arithmetic: add after_days to the original scheduled_at
         conn.execute(
             "UPDATE scheduled_deletions
-             SET delete_after = datetime(scheduled_at, '+' || ?3 || ' days')
+             SET delete_after = datetime(scheduled_at, '+' || ?3 || ' minutes')
              WHERE folder_id = ?1 AND rule_name = ?2",
-            params![folder_id, rule_name, after_days],
+            params![folder_id, rule_name, delay_minutes],
         )
     }
 }

@@ -13,7 +13,7 @@ import {
 import { open } from "@tauri-apps/plugin-dialog";
 import * as api from "../../api";
 import type { Rule } from "../../types";
-import { type ActionType, defaultAction } from "./helpers";
+import { type ActionType, defaultAction, minutesToParts, partsToMinutes } from "./helpers";
 
 interface RuleEditorProps {
   rule: Rule;
@@ -28,7 +28,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
   // Pre-fill destination with root path for new rules
   const initialRule = { ...rule };
   if (isNew && initialRule.action.type === "Move" && !initialRule.action.destination) {
-    initialRule.action = { type: "Move", destination: defaultSortRoot.replace(/[\\/]$/, "") + "\\" };
+    initialRule.action = { type: "Move", destination: defaultSortRoot.replace(/[\\/]$/, "") + "\\", delay_minutes: initialRule.action.delay_minutes ?? 0 };
   }
   const [draft, setDraft] = useState<Rule>(initialRule);
   const [conditionText, setConditionText] = useState(rule.condition_text || "*");
@@ -80,7 +80,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
   const handleActionTypeChange = (newType: ActionType) => {
     setActionType(newType);
     if (newType === "Move") {
-      setDraft({ ...draft, action: { type: "Move", destination: defaultSortRoot.replace(/[\\/]$/, "") + "\\" } });
+      setDraft({ ...draft, action: { type: "Move", destination: defaultSortRoot.replace(/[\\/]$/, "") + "\\", delay_minutes: 0 } });
     } else {
       setDraft({ ...draft, action: defaultAction(newType) });
     }
@@ -308,55 +308,106 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         </div>
 
         {actionType === "Move" && draft.action.type === "Move" && (
-          <div>
-            <label className="text-xs text-zinc-400 block mb-1">
-              {t("rules.destination")} *
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={draft.action.destination}
-                onChange={(e) => {
-                  setDestError(null);
-                  setDraft({
-                    ...draft,
-                    action: { type: "Move", destination: e.target.value },
-                  });
-                }}
-                placeholder={defaultSortRoot + "\\PDFs"}
-                className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-              />
-              <button
-                type="button"
-                onClick={async () => {
-                  const startPath = (
-                    draft.action.type === "Move" && draft.action.destination
-                      ? draft.action.destination
-                      : defaultSortRoot
-                  ).replace(/[\\/]+$/, "");
-                  try { await api.ensureDir(startPath); } catch { /* ignore */ }
-                  const selected = await open({
-                    directory: true,
-                    multiple: false,
-                    title: t("rules.selectDestination"),
-                    defaultPath: startPath,
-                  });
-                  if (selected) {
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">
+                {t("rules.destination")} *
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={draft.action.destination}
+                  onChange={(e) => {
+                    setDestError(null);
                     setDraft({
                       ...draft,
-                      action: { type: "Move", destination: selected as string },
+                      action: { ...draft.action, type: "Move", destination: e.target.value, delay_minutes: draft.action.delay_minutes },
                     });
-                  }
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-              >
-                <FolderOpen size={14} />
-                {t("rules.browse")}
-              </button>
+                  }}
+                  placeholder={defaultSortRoot + "\\PDFs"}
+                  className="flex-1 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const startPath = (
+                      draft.action.type === "Move" && draft.action.destination
+                        ? draft.action.destination
+                        : defaultSortRoot
+                    ).replace(/[\\/]+$/, "");
+                    try { await api.ensureDir(startPath); } catch { /* ignore */ }
+                    const selected = await open({
+                      directory: true,
+                      multiple: false,
+                      title: t("rules.selectDestination"),
+                      defaultPath: startPath,
+                    });
+                    if (selected) {
+                      setDraft({
+                        ...draft,
+                        action: { ...draft.action, type: "Move", destination: selected as string },
+                      });
+                    }
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                >
+                  <FolderOpen size={14} />
+                  {t("rules.browse")}
+                </button>
+              </div>
+              {destError && (
+                <p className="text-xs text-red-400 mt-1">{destError}</p>
+              )}
             </div>
-            {destError && (
-              <p className="text-xs text-red-400 mt-1">{destError}</p>
-            )}
+
+            {/* Copy vs Move mode */}
+            <div>
+              <div className="flex items-center gap-2">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draft.action.type === "Move" && !!draft.action.keep_source}
+                    onChange={(e) => {
+                      if (draft.action.type === "Move") {
+                        setDraft({
+                          ...draft,
+                          action: { ...draft.action, keep_source: e.target.checked },
+                        });
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-8 h-4 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:bg-blue-600 transition-colors after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:after:translate-x-4" />
+                </label>
+                <span className="text-xs text-zinc-400">{t("rules.keepSource")}</span>
+              </div>
+              <p className="text-xs text-zinc-500 mt-1 ml-10">
+                {draft.action.type === "Move" && draft.action.keep_source
+                  ? t("rules.keepSourceOnDesc")
+                  : t("rules.keepSourceOffDesc")}
+              </p>
+            </div>
+
+            {/* Move delay */}
+            <div>
+              <label className="text-xs text-zinc-400 block mb-1">
+                {t("rules.moveDelay")}
+              </label>
+              <DelayPicker
+                totalMinutes={draft.action.delay_minutes}
+                onChange={(mins) =>
+                  setDraft({
+                    ...draft,
+                    action: draft.action.type === "Move"
+                      ? { ...draft.action, type: "Move", delay_minutes: mins }
+                      : draft.action,
+                  })
+                }
+              />
+              <p className="text-xs text-zinc-500 mt-1">
+                {t("rules.moveImmediate")}
+              </p>
+            </div>
           </div>
         )}
 
@@ -365,20 +416,14 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             <label className="text-xs text-zinc-400 block mb-1">
               {t("rules.deleteAfter")}
             </label>
-            <input
-              type="number"
-              min={0}
-              value={draft.action.after_days}
-              onChange={(e) =>
+            <DelayPicker
+              totalMinutes={draft.action.delay_minutes}
+              onChange={(mins) =>
                 setDraft({
                   ...draft,
-                  action: {
-                    type: "Delete",
-                    after_days: parseInt(e.target.value) || 0,
-                  },
+                  action: { type: "Delete", delay_minutes: mins },
                 })
               }
-              className="w-32 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
             />
             <p className="text-xs text-zinc-500 mt-1">
               {t("rules.deleteImmediate")}
@@ -479,6 +524,59 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         >
           {isNew ? t("rules.create") : t("rules.save")}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/** Reusable days/hours/minutes picker for delay configuration */
+function DelayPicker({
+  totalMinutes,
+  onChange,
+}: {
+  totalMinutes: number;
+  onChange: (totalMinutes: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { days, hours, minutes } = minutesToParts(totalMinutes);
+
+  const update = (d: number, h: number, m: number) => {
+    onChange(partsToMinutes(Math.max(0, d), Math.max(0, Math.min(23, h)), Math.max(0, Math.min(59, m))));
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          value={days}
+          onChange={(e) => update(parseInt(e.target.value) || 0, hours, minutes)}
+          className="w-16 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-center focus:outline-none focus:border-blue-500"
+        />
+        <span className="text-xs text-zinc-400">{t("rules.days")}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          max={23}
+          value={hours}
+          onChange={(e) => update(days, parseInt(e.target.value) || 0, minutes)}
+          className="w-16 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-center focus:outline-none focus:border-blue-500"
+        />
+        <span className="text-xs text-zinc-400">{t("rules.hours")}</span>
+      </div>
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          max={59}
+          value={minutes}
+          onChange={(e) => update(days, hours, parseInt(e.target.value) || 0)}
+          className="w-16 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-center focus:outline-none focus:border-blue-500"
+        />
+        <span className="text-xs text-zinc-400">{t("rules.minutes")}</span>
       </div>
     </div>
   );

@@ -32,7 +32,6 @@ pub struct AppSettings {
     /// Minimize to tray on close
     pub minimize_to_tray: bool,
     /// Show toast notifications on actions
-    // ...existing code...
     /// Days to keep activity log entries
     pub log_retention_days: u32,
     /// Maximum database size in MB (0 = unlimited)
@@ -158,10 +157,27 @@ pub enum Condition {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum Action {
-    /// Move file to destination folder
-    Move { destination: PathBuf },
-    /// Schedule file for deletion after N days (0 = immediate on next scan)
-    Delete { after_days: u32 },
+    /// Move file to destination folder (optionally after a delay)
+    Move {
+        destination: PathBuf,
+        /// Delay in minutes before the move executes. 0 = immediate (default).
+        #[serde(default)]
+        delay_minutes: u32,
+        /// When true, keep the source file after copying (copy mode).
+        /// When false (default), remove the source after moving (cut mode).
+        #[serde(default)]
+        keep_source: bool,
+    },
+    /// Schedule file for deletion after a delay (0 = immediate on next scan)
+    Delete {
+        /// DEPRECATED — kept for backward-compat deserialization.
+        /// Converted to delay_minutes on config load via migrate_config().
+        #[serde(default, skip_serializing)]
+        after_days: u32,
+        /// Delay in minutes before deletion. Default 1440 (1 day).
+        #[serde(default)]
+        delay_minutes: u32,
+    },
 }
 
 impl Default for AppConfig {
@@ -203,12 +219,35 @@ pub fn load_config() -> AppConfig {
     let path = config_path();
     if path.exists() {
         let data = read_file_strip_bom(&path).unwrap_or_default();
-        serde_json::from_str(&data).unwrap_or_default()
+        let mut config: AppConfig = serde_json::from_str(&data).unwrap_or_default();
+        if migrate_config(&mut config) {
+            save_config(&config).ok();
+        }
+        config
     } else {
         let config = AppConfig::default();
         save_config(&config).ok();
         config
     }
+}
+
+/// Migrate legacy config fields. Returns true if any migration was applied.
+fn migrate_config(config: &mut AppConfig) -> bool {
+    let mut changed = false;
+    for folder in &mut config.folders {
+        for rule in &mut folder.rules {
+            if let Action::Delete { after_days, delay_minutes } = &mut rule.action {
+                // If we deserialized an old config with after_days but no delay_minutes,
+                // convert days → minutes.
+                if *after_days > 0 && *delay_minutes == 0 {
+                    *delay_minutes = *after_days * 24 * 60;
+                    *after_days = 0;
+                    changed = true;
+                }
+            }
+        }
+    }
+    changed
 }
 
 pub fn save_config(config: &AppConfig) -> Result<(), String> {

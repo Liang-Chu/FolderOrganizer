@@ -22,12 +22,14 @@ pub struct RuleActionResult {
 pub enum EvalOutcome {
     /// A move/immediate action was executed.
     Action(RuleActionResult),
-    /// A deletion was scheduled (new or already existed).
+    /// A deletion or move was scheduled (new or already existed).
     Scheduled {
         file_path: String,
         file_name: String,
         rule_name: String,
         newly_inserted: bool,
+        action_type: String,
+        details: Option<String>,
     },
     /// No rule matched this file.
     NoMatch,
@@ -124,45 +126,67 @@ pub fn evaluate_file_full(
         }
 
         // Auto-whitelist: if this is a Move rule, skip files already in the destination
-        if let Action::Move { ref destination } = rule.action {
+        if let Action::Move { ref destination, .. } = rule.action {
             if is_file_in_dir(file_path, destination) {
                 continue;
             }
         }
 
-        // Determine what string to match against:
-        //   - match_subdirectories=true  → relative path from watched folder (forward slashes)
-        //   - match_subdirectories=false → filename only (default)
-        let match_target = if rule.match_subdirectories {
-            // Compute relative path from the watched folder root
-            file_path
+        // Matching behavior:
+        //   - match_subdirectories=true  → evaluate against relative file path
+        //   - match_subdirectories=false → evaluate against the entry name (filename or folder name).
+        //     Folders and files that are direct children of the watched folder are matched by name.
+        let matched = if rule.match_subdirectories {
+            let relative_path = file_path
                 .strip_prefix(&folder.path)
                 .unwrap_or(file_path)
                 .to_string_lossy()
-                .replace('\\', "/")
+                .replace('\\', "/");
+            condition::evaluate(&rule.condition, &relative_path)
         } else {
-            file_name.clone()
+            // file_name is the last component — works for both files and directories
+            condition::evaluate(&rule.condition, &file_name)
         };
 
-        // Test condition tree against the match target
-        if !condition::evaluate(&rule.condition, &match_target) {
+        if !matched {
             continue;
         }
 
         // Condition matched — execute the action
         match &rule.action {
-            Action::Move { .. } => {
-                return EvalOutcome::Action(execute_action(file_path, &file_name, rule, folder, db));
-            }
-            Action::Delete { after_days } => {
-                // Schedule for deletion — insert into scheduled_deletions table.
-                // If already scheduled, this is a silent no-op (no duplicate log).
-                let newly_inserted = schedule_deletion(file_path, &file_name, rule, folder, db, *after_days);
+            Action::Move { delay_minutes, keep_source, .. } if *delay_minutes > 0 => {
+                // Scheduled move
+                let destination = if let Action::Move { ref destination, .. } = rule.action {
+                    destination.to_string_lossy().to_string()
+                } else {
+                    unreachable!()
+                };
+                let newly_inserted = schedule_action(
+                    file_path, &file_name, rule, folder, db, *delay_minutes, "move", Some(&destination), *keep_source,
+                );
                 return EvalOutcome::Scheduled {
                     file_path: file_path.to_string_lossy().to_string(),
                     file_name: file_name.clone(),
                     rule_name: rule.name.clone(),
                     newly_inserted,
+                    action_type: "scheduled_move".to_string(),
+                    details: Some(format!("→ {}", destination)),
+                };
+            }
+            Action::Move { .. } => {
+                return EvalOutcome::Action(execute_action(file_path, &file_name, rule, folder, db));
+            }
+            Action::Delete { delay_minutes, .. } => {
+                let newly_inserted = schedule_action(
+                    file_path, &file_name, rule, folder, db, *delay_minutes, "delete", None, false,
+                );
+                return EvalOutcome::Scheduled {
+                    file_path: file_path.to_string_lossy().to_string(),
+                    file_name: file_name.clone(),
+                    rule_name: rule.name.clone(),
+                    newly_inserted,
+                    action_type: "scheduled_delete".to_string(),
+                    details: None,
                 };
             }
         }
@@ -171,19 +195,22 @@ pub fn evaluate_file_full(
     EvalOutcome::NoMatch
 }
 
-/// Schedule a file for deletion by inserting into the scheduled_deletions table.
+/// Schedule a file for a future action (delete or move) by inserting into the scheduled_deletions table.
 /// Uses upsert so re-scans don't create duplicates.
 /// Returns true if a new entry was inserted, false if already scheduled.
-fn schedule_deletion(
+fn schedule_action(
     file_path: &Path,
     file_name: &str,
     rule: &Rule,
     folder: &WatchedFolder,
     db: &Database,
-    after_days: u32,
+    delay_minutes: u32,
+    action_type: &str,
+    move_destination: Option<&str>,
+    keep_source: bool,
 ) -> bool {
     let now = Utc::now();
-    let delete_after = now + chrono::Duration::days(after_days as i64);
+    let execute_after = now + chrono::Duration::minutes(delay_minutes as i64);
     let extension = file_path
         .extension()
         .map(|e| e.to_string_lossy().to_string());
@@ -198,14 +225,17 @@ fn schedule_deletion(
         extension.as_deref(),
         size,
         &now.format("%Y-%m-%d %H:%M:%S").to_string(),
-        &delete_after.format("%Y-%m-%d %H:%M:%S").to_string(),
+        &execute_after.format("%Y-%m-%d %H:%M:%S").to_string(),
+        action_type,
+        move_destination,
+        keep_source,
     );
 
     match inserted {
         Ok(true) => {
             log::info!(
-                "Scheduled deletion: {} (after {} days, rule: {})",
-                file_name, after_days, rule.name
+                "Scheduled {}: {} (after {} minutes, rule: {})",
+                action_type, file_name, delay_minutes, rule.name
             );
             true
         }
@@ -214,7 +244,7 @@ fn schedule_deletion(
             false
         }
         Err(e) => {
-            log::error!("Failed to schedule deletion for {}: {}", file_name, e);
+            log::error!("Failed to schedule {} for {}: {}", action_type, file_name, e);
             false
         }
     }
@@ -228,8 +258,8 @@ fn execute_action(
     _db: &Database,
 ) -> RuleActionResult {
     match &rule.action {
-        Action::Move { destination } => {
-            execute_move(file_path, destination, file_name, &rule.name)
+        Action::Move { destination, keep_source, .. } => {
+            execute_move(file_path, destination, file_name, &rule.name, *keep_source)
         }
         Action::Delete { .. } => {
             // This branch should not be reached — Delete is handled by schedule_deletion
@@ -243,6 +273,7 @@ fn execute_move(
     destination: &Path,
     file_name: &str,
     rule_name: &str,
+    keep_source: bool,
 ) -> RuleActionResult {
     if let Err(e) = fs::create_dir_all(destination) {
         return RuleActionResult {
@@ -258,10 +289,14 @@ fn execute_move(
     let dest_file = destination.join(file_name);
     let final_dest = if dest_file.exists() {
         let stem = file_path.file_stem().unwrap_or_default().to_string_lossy();
-        let ext = file_path
-            .extension()
-            .map(|e| format!(".{}", e.to_string_lossy()))
-            .unwrap_or_default();
+        let ext = if file_path.is_file() {
+            file_path
+                .extension()
+                .map(|e| format!(".{}", e.to_string_lossy()))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
         let mut counter = 1;
         loop {
             let candidate = destination.join(format!("{} ({}){}", stem, counter, ext));
@@ -274,40 +309,119 @@ fn execute_move(
         dest_file
     };
 
+    let action_label = if keep_source { "copied" } else { "moved" };
+    let action_verb = if keep_source { "Copied" } else { "Moved" };
+
+    // Copy mode: always copy, never remove source
+    if keep_source {
+        let copy_result = if file_path.is_dir() {
+            copy_dir_recursive(file_path, &final_dest).map(|_| ())
+        } else {
+            fs::copy(file_path, &final_dest).map(|_| ())
+        };
+        return match copy_result {
+            Ok(_) => RuleActionResult {
+                file_path: file_path.to_string_lossy().to_string(),
+                file_name: file_name.to_string(),
+                action: action_label.to_string(),
+                rule_name: rule_name.to_string(),
+                success: true,
+                details: Some(format!("{} to {}", action_verb, final_dest.display())),
+            },
+            Err(e) => RuleActionResult {
+                file_path: file_path.to_string_lossy().to_string(),
+                file_name: file_name.to_string(),
+                action: "copy".to_string(),
+                rule_name: rule_name.to_string(),
+                success: false,
+                details: Some(format!("Copy failed: {}", e)),
+            },
+        };
+    }
+
+    // Cut mode: try rename first (atomic), fallback to copy + delete
     match fs::rename(file_path, &final_dest) {
         Ok(_) => RuleActionResult {
             file_path: file_path.to_string_lossy().to_string(),
             file_name: file_name.to_string(),
-            action: "moved".to_string(),
+            action: action_label.to_string(),
             rule_name: rule_name.to_string(),
             success: true,
-            details: Some(format!("Moved to {}", final_dest.display())),
+            details: Some(format!("{} to {}", action_verb, final_dest.display())),
         },
         Err(e) => {
-            match fs::copy(file_path, &final_dest) {
-                Ok(_) => {
-                    let _ = fs::remove_file(file_path);
-                    RuleActionResult {
+            if file_path.is_dir() {
+                // Directory cross-device move: recursive copy then remove
+                match copy_dir_recursive(file_path, &final_dest) {
+                    Ok(_) => {
+                        if let Err(rm_err) = fs::remove_dir_all(file_path) {
+                            log::warn!("Copied dir to {} but failed to remove source: {}", final_dest.display(), rm_err);
+                        }
+                        RuleActionResult {
+                            file_path: file_path.to_string_lossy().to_string(),
+                            file_name: file_name.to_string(),
+                            action: action_label.to_string(),
+                            rule_name: rule_name.to_string(),
+                            success: true,
+                            details: Some(format!("{} to {}", action_verb, final_dest.display())),
+                        }
+                    }
+                    Err(copy_err) => RuleActionResult {
                         file_path: file_path.to_string_lossy().to_string(),
                         file_name: file_name.to_string(),
-                        action: "moved".to_string(),
+                        action: "move".to_string(),
                         rule_name: rule_name.to_string(),
-                        success: true,
-                        details: Some(format!("Moved to {}", final_dest.display())),
-                    }
+                        success: false,
+                        details: Some(format!(
+                            "Move failed: {}, dir copy failed: {}",
+                            e, copy_err
+                        )),
+                    },
                 }
-                Err(copy_err) => RuleActionResult {
-                    file_path: file_path.to_string_lossy().to_string(),
-                    file_name: file_name.to_string(),
-                    action: "move".to_string(),
-                    rule_name: rule_name.to_string(),
-                    success: false,
-                    details: Some(format!(
-                        "Move failed: {}, copy failed: {}",
-                        e, copy_err
-                    )),
-                },
+            } else {
+                match fs::copy(file_path, &final_dest) {
+                    Ok(_) => {
+                        if let Err(rm_err) = fs::remove_file(file_path) {
+                            log::warn!("Copied file to {} but failed to remove source: {}", final_dest.display(), rm_err);
+                        }
+                        RuleActionResult {
+                            file_path: file_path.to_string_lossy().to_string(),
+                            file_name: file_name.to_string(),
+                            action: action_label.to_string(),
+                            rule_name: rule_name.to_string(),
+                            success: true,
+                            details: Some(format!("{} to {}", action_verb, final_dest.display())),
+                        }
+                    }
+                    Err(copy_err) => RuleActionResult {
+                        file_path: file_path.to_string_lossy().to_string(),
+                        file_name: file_name.to_string(),
+                        action: "move".to_string(),
+                        rule_name: rule_name.to_string(),
+                        success: false,
+                        details: Some(format!(
+                            "Move failed: {}, copy failed: {}",
+                            e, copy_err
+                        )),
+                    },
+                }
             }
         }
     }
+}
+
+/// Recursively copy a directory and all its contents to a new location.
+pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            fs::copy(&src_path, &dst_path)?;
+        }
+    }
+    Ok(())
 }

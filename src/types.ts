@@ -74,8 +74,8 @@ export type Condition =
  * Tagged union using `type` discriminant.
  */
 export type Action =
-  | { type: "Move"; destination: string }
-  | { type: "Delete"; after_days: number };
+  | { type: "Move"; destination: string; delay_minutes: number; keep_source?: boolean }
+  | { type: "Delete"; delay_minutes: number };
 
 export interface ActivityLogEntry {
   id: string;
@@ -135,8 +135,14 @@ export interface ScheduledDeletion {
   size_bytes: number | null;
   /** When the file was first scheduled */
   scheduled_at: string;
-  /** When the file should actually be deleted */
+  /** When the file should actually be acted on */
   delete_after: string;
+  /** 'delete' or 'move' */
+  action_type: string;
+  /** Destination path for scheduled moves */
+  move_destination: string | null;
+  /** Whether to keep the source file after copying */
+  keep_source: boolean;
 }
 
 export interface TableStats {

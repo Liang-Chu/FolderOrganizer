@@ -123,10 +123,17 @@ export function RuleListItem({ rule, index = 0, isEditing, onEdit, onDelete, onT
         <Clock size={10} />
         {formatLastRun(stats?.last_executed, t)}
       </div>
-      {/* 7d */}
-      <div className="col-span-1 flex items-center justify-end gap-1 text-[11px] text-zinc-500 pr-1">
+      {/* 7d + Delete */}
+      <div className="col-span-1 flex items-center justify-end gap-1.5 text-[11px] text-zinc-500 pr-1">
         <Zap size={10} />
         {stats?.executions_this_week ?? 0}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(rule.id); }}
+          className="ml-1 text-zinc-600 hover:text-red-400 transition-colors p-0.5 rounded hover:bg-red-400/10"
+          title={t("rules.deleteRule")}
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
       {/* Controls */}
       <div className="hidden">

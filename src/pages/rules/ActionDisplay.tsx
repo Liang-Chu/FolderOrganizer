@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import * as api from "../../api";
 import type { Action } from "../../types";
-import { actionLabel } from "./helpers";
+import { actionLabel, formatDelayTime } from "./helpers";
 
 interface ActionDisplayProps {
   action: Action;
@@ -24,9 +24,14 @@ export function ActionDisplay({ action }: ActionDisplayProps) {
   };
 
   if (action.type === "Move") {
+    const hasDelay = action.delay_minutes > 0;
+    const isCopy = !!action.keep_source;
+    const label = isCopy
+      ? (hasDelay ? t("rules.copyAfterLabel", { time: formatDelayTime(action.delay_minutes, t) }) : t("rules.copyTo"))
+      : (hasDelay ? t("rules.moveAfterLabel", { time: formatDelayTime(action.delay_minutes, t) }) : t("rules.moveTo"));
     return (
       <span>
-        {t("rules.moveTo")}{" "}
+        {label}{" "}
         {action.destination ? (
           <>
             <span

@@ -39,8 +39,8 @@ impl FileWatcher {
                     for event in events {
                         if event.kind == DebouncedEventKind::Any {
                             let path = &event.path;
-                            // Only process files, not directories
-                            if path.is_file() {
+                            // Process both files and directories (folder-name matching)
+                            if path.is_file() || path.is_dir() {
                                 handle_file_event(path, &cfg, &db_clone);
                             }
                         }
@@ -52,8 +52,6 @@ impl FileWatcher {
 
         for folder in &config.folders {
             if folder.enabled && folder.path.exists() {
-                // Auto-derive recursive mode: if any rule uses match_subdirectories,
-                // the OS watcher must also recurse so those files are detected.
                 let needs_recursive = folder.watch_subdirectories
                     || folder.rules.iter().any(|r| r.match_subdirectories);
                 let mode = if needs_recursive {
@@ -94,10 +92,9 @@ fn handle_file_event(
     let folder = config.folders.iter().find(|f| {
         f.enabled
             && if f.watch_subdirectories {
-                // Recursive: file can be anywhere under the watched folder
                 file_path.starts_with(&f.path)
             } else {
-                // Non-recursive: file must be a direct child
+                // Direct child file or direct child directory
                 file_path
                     .parent()
                     .map(|p| p == f.path)
@@ -138,8 +135,19 @@ fn handle_file_event(
                 file_name,
                 rule_name,
                 newly_inserted,
+                action_type,
+                details,
             } => {
                 if newly_inserted {
+                    let base = if action_type.contains("move") {
+                        "File scheduled for move"
+                    } else {
+                        "File scheduled for deletion"
+                    };
+                    let detail = match details {
+                        Some(ref d) => format!("{} {}", base, d),
+                        None => base.to_string(),
+                    };
                     let _ = db.insert_activity(
                         &uuid::Uuid::new_v4().to_string(),
                         &file_path,
@@ -149,9 +157,9 @@ fn handle_file_event(
                         Some(&folder.id),
                         &now,
                         "success",
-                        Some("File scheduled for deletion"),
+                        Some(&detail),
                     );
-                    log::info!("[OK] {} → scheduled ({})", file_name, rule_name);
+                    log::info!("[OK] {} → scheduled {} ({})", file_name, action_type, rule_name);
                 }
             }
             rules::EvalOutcome::NoMatch => {}

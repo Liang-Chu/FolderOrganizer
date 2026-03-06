@@ -6,12 +6,13 @@ import {
   Play,
   Pause,
   RefreshCw,
-  Trash2,
   Clock,
-  HelpCircle,
   ArrowUpDown,
+  Layers,
+  ChevronRight,
 } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
+import { confirm } from "@tauri-apps/plugin-dialog";
 import * as api from "../api";
 import type { AppConfig, ActivityLogEntry, ScheduledDeletion } from "../types";
 import { formatBytes } from "../utils/format";
@@ -25,6 +26,18 @@ type ScanStatusEvent = {
 };
 
 /** Split a full file path into directory + file name */
+/** Extract a destination path from activity details strings like:
+ *  "Moved to C:\path\file.txt", "File moved to C:\path\", "File scheduled for move → C:\path\" */
+function extractDestination(details: string | null): string | null {
+  if (!details) return null;
+  // "→ C:\..." or "Moved to C:\..." or "File moved to C:\..."
+  const arrowMatch = details.match(/→\s*(.+)/);
+  if (arrowMatch) return arrowMatch[1].trim();
+  const movedMatch = details.match(/[Mm]oved to\s+(.+)/);
+  if (movedMatch) return movedMatch[1].trim();
+  return null;
+}
+
 function splitPath(filePath: string): { dir: string; name: string } {
   const sep = filePath.lastIndexOf("\\") !== -1 ? "\\" : "/";
   const idx = filePath.lastIndexOf(sep);
@@ -67,6 +80,10 @@ export default function Dashboard() {
   const [scanResult, setScanResult] = useState<string | null>(null);
   const [sortCol, setSortCol] = useState<"file" | "rule" | "date">("date");
   const [sortAsc, setSortAsc] = useState(true);
+  const [selectedDeletionIds, setSelectedDeletionIds] = useState<string[]>([]);
+  const [deletingSelected, setDeletingSelected] = useState(false);
+  const [groupBy, setGroupBy] = useState<"none" | "date" | "rule" | "folder">("date");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const refreshInFlight = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -83,6 +100,7 @@ export default function Dashboard() {
       setRecentActivity(log);
       setWatcherRunning(status);
       setScheduledDeletions(deletions);
+      setSelectedDeletionIds((prev) => prev.filter((id) => deletions.some((d) => d.id === id)));
     } catch (e) {
       console.error("Failed to load dashboard data:", e);
     } finally {
@@ -153,6 +171,27 @@ export default function Dashboard() {
     loadData();
   };
 
+  const handleDeleteSelectedNow = async () => {
+    if (selectedDeletionIds.length === 0) return;
+    const ok = await confirm(
+      t("dashboard.deleteNowConfirm", { count: selectedDeletionIds.length }),
+      { title: t("dashboard.deleteNow"), kind: "warning" }
+    );
+    if (!ok) return;
+    setDeletingSelected(true);
+    try {
+      const count = await api.deleteScheduledNow(selectedDeletionIds);
+      setDeletionResult(t("dashboard.deletionsSelectedRan", { count }));
+      setSelectedDeletionIds([]);
+      setTimeout(() => setDeletionResult(null), 3000);
+      loadData();
+    } catch (e) {
+      console.error("Delete selected failed:", e);
+    } finally {
+      setDeletingSelected(false);
+    }
+  };
+
   const handleOpenFolder = async (filePath: string) => {
     const { dir } = splitPath(filePath);
     if (dir) {
@@ -187,6 +226,70 @@ export default function Dashboard() {
   const visibleDeletions = showAllDeletions
     ? sortedDeletions
     : sortedDeletions.slice(0, 8);
+  const allVisibleSelected = visibleDeletions.length > 0 && visibleDeletions.every((entry) => selectedDeletionIds.includes(entry.id));
+
+  // Build folder id → path lookup
+  const folderPathMap = new Map<string, string>();
+  for (const f of config?.folders ?? []) folderPathMap.set(f.id, f.path);
+
+  // Group visible deletions
+  type DeletionGroup = { label: string; items: typeof visibleDeletions };
+  const groupedDeletions: DeletionGroup[] = (() => {
+    if (groupBy === "none") return [{ label: "", items: visibleDeletions }];
+    const map = new Map<string, typeof visibleDeletions>();
+    for (const entry of visibleDeletions) {
+      let key: string;
+      if (groupBy === "date") key = entry.delete_after.split(" ")[0];
+      else if (groupBy === "rule") key = entry.rule_name;
+      else key = folderPathMap.get(entry.folder_id) ?? entry.folder_id;
+      const list = map.get(key);
+      if (list) list.push(entry);
+      else map.set(key, [entry]);
+    }
+    return [...map.entries()].map(([label, items]) => ({ label, items }));
+  })();
+
+  const toggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      setSelectedDeletionIds((prev) => prev.filter((id) => !visibleDeletions.some((entry) => entry.id === id)));
+      return;
+    }
+
+    setSelectedDeletionIds((prev) => {
+      const merged = new Set(prev);
+      for (const entry of visibleDeletions) merged.add(entry.id);
+      return [...merged];
+    });
+  };
+
+  const toggleSelectDeletion = (id: string) => {
+    setSelectedDeletionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleGroupCollapsed = (label: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
+
+  const toggleSelectGroup = (group: { items: typeof visibleDeletions }) => {
+    const groupIds = group.items.map((e) => e.id);
+    const allSelected = groupIds.every((id) => selectedDeletionIds.includes(id));
+    if (allSelected) {
+      setSelectedDeletionIds((prev) => prev.filter((id) => !groupIds.includes(id)));
+    } else {
+      setSelectedDeletionIds((prev) => {
+        const merged = new Set(prev);
+        for (const id of groupIds) merged.add(id);
+        return [...merged];
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -260,7 +363,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2">
                 <Clock size={16} className="text-amber-400" />
                 <h3 className="font-semibold text-amber-400">
-                  {t("dashboard.scheduledDeletions")}
+                  {t("dashboard.scheduledActions")}
                 </h3>
                 <span className="text-xs text-amber-400/60 ml-1">
                   {t("dashboard.scheduledDeletionsCount", { count: scheduledDeletions.length })}
@@ -270,29 +373,60 @@ export default function Dashboard() {
                 {deletionResult && (
                   <span className="text-xs text-green-400">{deletionResult}</span>
                 )}
-                <span
-                  className="text-amber-400/50 cursor-help"
-                  title={t("dashboard.runDeletionsHint")}
-                >
-                  <HelpCircle size={14} />
-                </span>
+                {selectedDeletionIds.length > 0 && (
+                  <span className="text-xs text-amber-300/80">
+                    {t("dashboard.selectedCount", { count: selectedDeletionIds.length })}
+                  </span>
+                )}
+                <div className="flex items-center gap-1 text-zinc-400">
+                  <Layers size={14} />
+                  <select
+                    value={groupBy}
+                    onChange={(e) => setGroupBy(e.target.value as typeof groupBy)}
+                    className="bg-zinc-800 border border-zinc-700 rounded text-xs px-1.5 py-1 text-zinc-300 cursor-pointer focus:border-amber-500 focus:outline-none"
+                  >
+                    <option value="none">{t("dashboard.groupByNone")}</option>
+                    <option value="date">{t("dashboard.groupByDate")}</option>
+                    <option value="rule">{t("dashboard.groupByRule")}</option>
+                    <option value="folder">{t("dashboard.groupByFolder")}</option>
+                  </select>
+                </div>
                 <button
                   onClick={handleRunDeletions}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-medium transition-colors"
+                  title={t("dashboard.runDeletionsHint")}
                 >
-                  <Trash2 size={14} />
+                  <Play size={14} />
                   {t("dashboard.runDeletionsNow")}
+                </button>
+                <button
+                  onClick={handleDeleteSelectedNow}
+                  disabled={selectedDeletionIds.length === 0 || deletingSelected}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-red-700 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed rounded-lg text-xs font-medium transition-colors"
+                  title={t("dashboard.deleteNowHint")}
+                >
+                  <Play size={14} />
+                  {deletingSelected ? t("dashboard.deletingNow") : t("dashboard.deleteNow")}
                 </button>
               </div>
             </div>
             <table className="w-full text-sm table-fixed">
               <colgroup>
+                <col className="w-[5%]" />
                 <col className="w-[55%]" />
                 <col className="w-[25%]" />
                 <col className="w-[20%]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-zinc-800 text-zinc-400">
+                  <th className="text-left pl-3 pr-1 py-3">
+                    <input
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={toggleSelectAllVisible}
+                      className="h-4 w-4 accent-amber-500 cursor-pointer"
+                    />
+                  </th>
                   <th
                     className="text-left px-5 py-3 font-medium cursor-pointer hover:text-zinc-200 select-none"
                     onClick={() => { if (sortCol === "file") setSortAsc(!sortAsc); else { setSortCol("file"); setSortAsc(true); } }}
@@ -323,29 +457,96 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-800">
-                {visibleDeletions.map((entry) => {
-                  const { dir, name } = formatDisplayPath(entry.file_path);
-                  const dateOnly = entry.delete_after.split(" ")[0];
+                {groupedDeletions.map((group) => {
+                  const isGrouped = groupBy !== "none" && group.label;
+                  const isCollapsed = isGrouped ? collapsedGroups.has(group.label) : false;
+                  const allGroupSelected = group.items.length > 0 && group.items.every((e) => selectedDeletionIds.includes(e.id));
                   return (
-                    <tr key={entry.id} className="hover:bg-zinc-800/50">
-                      <td className="px-5 py-3 overflow-hidden">
-                        <button
-                          onClick={() => handleOpenFolder(entry.file_path)}
-                          className="text-left underline decoration-zinc-600 underline-offset-2 hover:decoration-amber-400 transition-colors cursor-pointer break-words max-w-full"
-                          title={entry.file_path}
-                        >
-                          <span className="text-zinc-500">{dir}\</span>
-                          <span className="font-semibold text-amber-300">{name}</span>
-                        </button>
-                        {entry.size_bytes != null && (
-                          <span className="text-xs text-zinc-600">
-                            {formatBytes(entry.size_bytes)}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-zinc-400 truncate" title={entry.rule_name}>{entry.rule_name}</td>
-                      <td className="px-5 py-3 text-amber-400/80 whitespace-nowrap">{dateOnly}</td>
-                    </tr>
+                    <>
+                      {isGrouped && (
+                        <tr key={`group-${group.label}`} className="bg-zinc-800/60">
+                          <td className="pl-6 pr-1 py-2">
+                            <input
+                              type="checkbox"
+                              checked={allGroupSelected}
+                              onChange={() => toggleSelectGroup(group)}
+                              className="h-4 w-4 accent-amber-500 cursor-pointer"
+                            />
+                          </td>
+                          <td
+                            colSpan={3}
+                            className="py-2 pr-4 cursor-pointer select-none"
+                            onClick={() => toggleGroupCollapsed(group.label)}
+                          >
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400/90 tracking-wide uppercase">
+                              <ChevronRight
+                                size={14}
+                                className={`transition-transform ${isCollapsed ? "" : "rotate-90"}`}
+                              />
+                              {group.label}
+                              <span className="text-zinc-500 font-normal normal-case">({group.items.length})</span>
+                            </span>
+                          </td>
+                        </tr>
+                      )}
+                      {!isCollapsed && group.items.map((entry) => {
+                        const { dir, name } = formatDisplayPath(entry.file_path);
+                        const dateOnly = entry.delete_after.split(" ")[0];
+                        const timePart = entry.delete_after.split(" ")[1]?.slice(0, 5) ?? "";
+                        return (
+                          <tr key={entry.id} className="hover:bg-zinc-800/50">
+                            <td className="pl-9 pr-1 py-3 align-top">
+                              <input
+                                type="checkbox"
+                                checked={selectedDeletionIds.includes(entry.id)}
+                                onChange={() => toggleSelectDeletion(entry.id)}
+                                className="h-4 w-4 accent-amber-500 cursor-pointer"
+                              />
+                            </td>
+                            <td className="px-5 py-3 overflow-hidden">
+                              <button
+                                onClick={() => handleOpenFolder(entry.file_path)}
+                                className="text-left underline decoration-zinc-600 underline-offset-2 hover:decoration-amber-400 transition-colors cursor-pointer break-words max-w-full"
+                                title={entry.file_path}
+                              >
+                                <span className="text-zinc-500">{dir}\</span>
+                                <span className="font-semibold text-amber-300">{name}</span>
+                              </button>
+                              {entry.action_type === "move" && (
+                                <span className={`text-[10px] font-medium rounded px-1 py-0.5 ml-1.5 align-middle ${
+                                  entry.keep_source
+                                    ? "text-emerald-400/70 bg-emerald-400/10"
+                                    : "text-blue-400/70 bg-blue-400/10"
+                                }`}>
+                                  {entry.keep_source ? t("dashboard.copyAction") : t("dashboard.moveAction")}
+                                </span>
+                              )}
+                              {entry.size_bytes != null && (
+                                <span className="text-xs text-zinc-600 ml-2">
+                                  {formatBytes(entry.size_bytes)}
+                                </span>
+                              )}
+                              {entry.action_type === "move" && entry.move_destination && (
+                                <div className="mt-0.5">
+                                  <button
+                                    onClick={() => handleOpenFolder(entry.move_destination!)}
+                                    className="text-xs text-blue-400/70 hover:text-blue-300 hover:underline transition-colors cursor-pointer truncate max-w-full"
+                                    title={entry.move_destination}
+                                  >
+                                    → {entry.move_destination}
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-zinc-400 truncate" title={entry.rule_name}>{entry.rule_name}</td>
+                            <td className="px-5 py-3 text-amber-400/80 whitespace-nowrap">
+                              {dateOnly}
+                              <span className="text-amber-400/50 ml-1 text-xs">{timePart}</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </>
                   );
                 })}
               </tbody>
@@ -378,6 +579,8 @@ export default function Dashboard() {
             <div className="divide-y divide-zinc-800">
               {recentActivity.map((entry) => {
                 const { dir, name } = formatDisplayPath(entry.file_path);
+                const destination = extractDestination(entry.details);
+                const destDisplay = destination ? formatDisplayPath(destination) : null;
                 return (
                   <div
                     key={entry.id}
@@ -392,6 +595,16 @@ export default function Dashboard() {
                         <span className="text-zinc-500">{dir}\</span>
                         <span className="font-medium text-zinc-200">{name}</span>
                       </button>
+                      {destDisplay && (
+                        <button
+                          onClick={() => handleOpenFolder(destination!)}
+                          className="text-left text-xs text-blue-400/70 hover:text-blue-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-blue-400/50 transition-colors cursor-pointer break-words max-w-full mt-0.5 block"
+                          title={destination!}
+                        >
+                          → <span className="text-zinc-500">{destDisplay.dir}\</span>
+                          <span>{destDisplay.name}</span>
+                        </button>
+                      )}
                       <p className="text-xs text-zinc-500 mt-0.5">
                         {entry.action} — {entry.rule_name ?? t("dashboard.manual")}
                       </p>

@@ -62,8 +62,20 @@ pub struct ScheduledDeletion {
     pub size_bytes: Option<i64>,
     /// When the file was first scheduled
     pub scheduled_at: String,
-    /// When the file should actually be deleted (scheduled_at + after_days)
+    /// When the action should execute (scheduled_at + delay)
     pub delete_after: String,
+    /// "delete" or "move"
+    #[serde(default = "default_action_type")]
+    pub action_type: String,
+    /// For scheduled moves: the destination path
+    pub move_destination: Option<String>,
+    /// Whether to keep the source file after copying (copy mode)
+    #[serde(default)]
+    pub keep_source: bool,
+}
+
+fn default_action_type() -> String {
+    "delete".to_string()
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

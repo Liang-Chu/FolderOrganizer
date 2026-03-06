@@ -76,6 +76,20 @@ export const copyRulesToFolder = (
 ) =>
   invoke<number>("copy_rules_to_folder", { targetFolderId, sources });
 
+/** Move a rule from one folder to another at a specific position. */
+export const moveRuleToFolder = (
+  sourceFolderId: string,
+  targetFolderId: string,
+  ruleId: string,
+  position: number
+) =>
+  invoke<void>("move_rule_to_folder", {
+    sourceFolderId,
+    targetFolderId,
+    ruleId,
+    position,
+  });
+
 // ── Activity & Data ─────────────────────────────────────────
 
 export const getActivityLog = (
@@ -106,6 +120,10 @@ export const cancelScheduledDeletion = (deletionId: string) =>
 /** Manually run all due deletions now. Returns count of files deleted. */
 export const runDeletions = () =>
   invoke<number>("run_deletions");
+
+/** Immediately delete selected scheduled deletions by ID. Returns count deleted. */
+export const deleteScheduledNow = (deletionIds: string[]) =>
+  invoke<number>("delete_scheduled_now", { deletionIds });
 
 // ── Watcher Control ─────────────────────────────────────────
 

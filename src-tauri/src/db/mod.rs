@@ -80,13 +80,26 @@ impl Database {
                 extension       TEXT,
                 size_bytes      INTEGER,
                 scheduled_at    TEXT NOT NULL,
-                delete_after    TEXT NOT NULL
+                delete_after    TEXT NOT NULL,
+                action_type     TEXT NOT NULL DEFAULT 'delete',
+                move_destination TEXT,
+                keep_source     INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE INDEX IF NOT EXISTS idx_sched_del_after ON scheduled_deletions(delete_after);
             CREATE INDEX IF NOT EXISTS idx_sched_del_folder ON scheduled_deletions(folder_id);
             ",
         )?;
+
+        // Migration: add columns for existing databases
+        let _ = conn.execute_batch("
+            ALTER TABLE scheduled_deletions ADD COLUMN action_type TEXT NOT NULL DEFAULT 'delete';
+            ALTER TABLE scheduled_deletions ADD COLUMN move_destination TEXT;
+        ");
+        let _ = conn.execute_batch("
+            ALTER TABLE scheduled_deletions ADD COLUMN keep_source INTEGER NOT NULL DEFAULT 0;
+        ");
+
         Ok(())
     }
 }

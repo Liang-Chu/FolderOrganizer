@@ -143,6 +143,18 @@ pub fn run_deletions(app: tauri::AppHandle, state: State<AppState>) -> Result<u3
     Ok(count)
 }
 
+/// Immediately delete selected scheduled deletions by IDs. Returns count deleted.
+#[tauri::command]
+pub fn delete_scheduled_now(
+    app: tauri::AppHandle,
+    state: State<AppState>,
+    deletion_ids: Vec<String>,
+) -> Result<u32, String> {
+    let count = scheduler::process_selected_deletions_now(&state.db, &deletion_ids);
+    let _ = app.emit("dashboard-data-changed", ());
+    Ok(count)
+}
+
 /// Get execution stats (last run + weekly count) for each rule in a folder.
 #[tauri::command]
 pub fn get_rule_execution_stats(

@@ -71,6 +71,16 @@ export default function Folders() {
     try {
       const f = await api.getWatchedFolders();
       setFolders(f);
+      // Default all folders to expanded (rules section)
+      setExpandedSections((prev) => {
+        const next = { ...prev };
+        for (const folder of f) {
+          if (!(folder.id in next)) {
+            next[folder.id] = "rules";
+          }
+        }
+        return next;
+      });
       // Load stats for all folders
       const statsMap: Record<string, Record<string, RuleExecutionStats>> = {};
       await Promise.all(
@@ -275,6 +285,13 @@ export default function Folders() {
   };
 
   const handleDeleteRule = async (folderId: string, ruleId: string) => {
+    const folder = folders.find((f) => f.id === folderId);
+    const ruleName = folder?.rules.find((r) => r.id === ruleId)?.name ?? "";
+    const ok = await confirm(
+      t("rules.deleteRuleConfirm", { name: ruleName }),
+      { title: t("rules.deleteRule"), kind: "warning" }
+    );
+    if (!ok) return;
     await api.deleteRule(folderId, ruleId);
     if (editingRule?.id === ruleId) {
       setEditingRule(null);
@@ -307,48 +324,135 @@ export default function Folders() {
 
   const [dragFolderId, setDragFolderId] = useState<string | null>(null);
   const [dragFromIndex, setDragFromIndex] = useState<number | null>(null);
+  const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragDirection, setDragDirection] = useState<"above" | "below" | null>(null);
+  const [dragRuleId, setDragRuleId] = useState<string | null>(null);
 
   const handleRuleDragStart = (folderId: string, index: number) => {
     setDragFolderId(folderId);
     setDragFromIndex(index);
+    const folder = folders.find((f) => f.id === folderId);
+    if (folder && folder.rules[index]) {
+      setDragRuleId(folder.rules[index].id);
+    }
   };
 
-  const handleRuleDragOver = (folderId: string, e: React.DragEvent, index: number) => {
-    if (dragFolderId !== folderId) return;
+  const handleRuleDragOver = (_folderId: string, e: React.DragEvent, index: number) => {
+    setDragOverFolderId(_folderId);
     setDragOverIndex(index);
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     setDragDirection(e.clientY < midY ? "above" : "below");
   };
 
-  const handleRuleDrop = async (folderId: string, dropIndex: number) => {
-    if (dragFolderId !== folderId || dragFromIndex === null) {
+  const handleRuleDrop = async (targetFolderId: string, dropIndex: number) => {
+    if (dragFolderId === null || dragFromIndex === null || dragRuleId === null) {
       resetDrag();
       return;
     }
-    const folder = folders.find((f) => f.id === folderId);
-    if (!folder) { resetDrag(); return; }
 
-    const ids = folder.rules.map((r) => r.id);
-    const [moved] = ids.splice(dragFromIndex, 1);
-    let insertAt = dropIndex;
-    if (dragFromIndex < dropIndex) insertAt--;
-    if (dragDirection === "below") insertAt++;
-    insertAt = Math.max(0, Math.min(ids.length, insertAt));
-    ids.splice(insertAt, 0, moved);
+    if (dragFolderId === targetFolderId) {
+      // Same folder: reorder
+      const folder = folders.find((f) => f.id === targetFolderId);
+      if (!folder) { resetDrag(); return; }
 
+      const ids = folder.rules.map((r) => r.id);
+      const [moved] = ids.splice(dragFromIndex, 1);
+      let insertAt = dropIndex;
+      if (dragFromIndex < dropIndex) insertAt--;
+      if (dragDirection === "below") insertAt++;
+      insertAt = Math.max(0, Math.min(ids.length, insertAt));
+      ids.splice(insertAt, 0, moved);
+
+      resetDrag();
+      await api.reorderRules(targetFolderId, ids);
+      await loadFolders();
+      // Rescan the folder so scheduled entries reflect the new priority order
+      api.scanFolder(targetFolderId).catch(() => {});
+    } else {
+      // Cross-folder: ask user to move or duplicate
+      const targetFolder = folders.find((f) => f.id === targetFolderId);
+      let insertAt = dropIndex;
+      if (dragDirection === "below") insertAt++;
+      if (targetFolder) {
+        insertAt = Math.max(0, Math.min(targetFolder.rules.length, insertAt));
+      }
+
+      const srcFolderId = dragFolderId;
+      const ruleId = dragRuleId;
+      resetDrag();
+      await handleCrossFolderDrop(srcFolderId, targetFolderId, ruleId, insertAt);
+    }
+  };
+
+  /** Handle dropping on an empty rules area or the container itself */
+  const handleRulesContainerDrop = async (targetFolderId: string, e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (dragFolderId === null || dragRuleId === null || dragFolderId === targetFolderId) {
+      resetDrag();
+      return;
+    }
+    const targetFolder = folders.find((f) => f.id === targetFolderId);
+    const position = targetFolder ? targetFolder.rules.length : 0;
+    const srcFolderId = dragFolderId;
+    const ruleId = dragRuleId;
     resetDrag();
-    await api.reorderRules(folderId, ids);
-    await loadFolders();
+    await handleCrossFolderDrop(srcFolderId, targetFolderId, ruleId, position);
+  };
+
+  /** Prompt user to move or duplicate a rule across folders, then execute. */
+  const handleCrossFolderDrop = async (
+    srcFolderId: string,
+    targetFolderId: string,
+    ruleId: string,
+    insertAt: number,
+  ) => {
+    const result = await message(t("folders.crossFolderPrompt"), {
+      title: t("folders.crossFolderTitle"),
+      buttons: {
+        yes: t("folders.moveRule"),
+        no: t("folders.duplicateRule"),
+        cancel: t("common.cancel"),
+      },
+    });
+
+    if (result === "Cancel") return;
+
+    if (result === "Yes") {
+      // Move
+      await api.moveRuleToFolder(srcFolderId, targetFolderId, ruleId, insertAt);
+      await loadFolders();
+      api.scanFolder(srcFolderId).catch(() => {});
+      setTimeout(() => api.scanFolder(targetFolderId).catch(() => {}), 1500);
+    } else {
+      // Duplicate (copy)
+      await api.copyRulesToFolder(targetFolderId, [
+        { folder_id: srcFolderId, rule_id: ruleId },
+      ]);
+      // The copy is appended at the end — reorder to place it at insertAt
+      const updated = await api.getConfig();
+      const tgt = updated.folders.find((f) => f.id === targetFolderId);
+      if (tgt && tgt.rules.length > 0) {
+        const ids = tgt.rules.map((r) => r.id);
+        // Move the last rule (the newly appended copy) to insertAt
+        const copiedId = ids.pop()!;
+        ids.splice(insertAt, 0, copiedId);
+        await api.reorderRules(targetFolderId, ids);
+      }
+      await loadFolders();
+      api.scanFolder(targetFolderId).catch(() => {});
+    }
   };
 
   const resetDrag = () => {
     setDragFolderId(null);
     setDragFromIndex(null);
+    setDragOverFolderId(null);
     setDragOverIndex(null);
     setDragDirection(null);
+    setDragRuleId(null);
   };
 
   // ── Assign rule to multiple folders ──
@@ -436,9 +540,23 @@ export default function Folders() {
               <div
                 key={folder.id}
                 id={`folder-${folder.id}`}
-                className="bg-zinc-900 rounded-xl border border-zinc-800 overflow-hidden cursor-pointer"
+                className={`bg-zinc-900 rounded-xl border overflow-hidden cursor-pointer transition-colors ${
+                  dragFolderId && dragFolderId !== folder.id && dragOverFolderId === folder.id
+                    ? "border-purple-500"
+                    : "border-zinc-800"
+                }`}
                 onClick={handleFolderCardClick(folder.id)}
-                onDragOver={(e) => { e.preventDefault(); }}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  if (dragFolderId && dragFolderId !== folder.id) {
+                    setDragOverFolderId(folder.id);
+                    // Auto-expand rules section when dragging over a folder
+                    if (expandedSections[folder.id] !== "rules") {
+                      setExpandedSections((prev) => ({ ...prev, [folder.id]: "rules" }));
+                    }
+                  }
+                }}
+                onDrop={(e) => handleRulesContainerDrop(folder.id, e)}
               >
                 {/* Folder header */}
                 <div className="px-5 py-3 flex items-center gap-3">
@@ -586,15 +704,25 @@ export default function Folders() {
 
                     {/* Rules list */}
                     {folder.rules.length === 0 && !(editingFolderId === folder.id && editingRule) ? (
-                      <div className="text-center text-zinc-500 text-sm py-8">
-                        {t("rules.noRules")}
+                      <div
+                        className={`text-center text-sm py-8 rounded-lg border-2 border-dashed transition-colors ${
+                          dragFolderId && dragFolderId !== folder.id
+                            ? "border-purple-500/40 bg-purple-500/5 text-purple-400"
+                            : "border-transparent text-zinc-500"
+                        }`}
+                        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        onDrop={(e) => handleRulesContainerDrop(folder.id, e)}
+                      >
+                        {dragFolderId && dragFolderId !== folder.id
+                          ? t("folders.dropRuleHere", "Drop rule here")
+                          : t("rules.noRules")}
                       </div>
                     ) : (
                       <div
                         className="overflow-x-auto"
                         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
                         onDragEnd={resetDrag}
-                        onDrop={(e) => { e.preventDefault(); e.stopPropagation(); resetDrag(); }}
+                        onDrop={(e) => handleRulesContainerDrop(folder.id, e)}
                       >
                         <div className="grid grid-cols-12 gap-2 px-2 py-1 text-xs text-zinc-400 font-semibold border-b border-zinc-800 select-none">
                           <span className="col-span-2">{t("rules.colName", "Name")}</span>
@@ -620,8 +748,8 @@ export default function Folders() {
                             onDragStart={(idx) => handleRuleDragStart(folder.id, idx)}
                             onDragOver={(e, idx) => handleRuleDragOver(folder.id, e, idx)}
                             onDrop={(idx) => handleRuleDrop(folder.id, idx)}
-                            isDragOver={dragFolderId === folder.id && dragOverIndex === ruleIdx}
-                            dragDirection={dragFolderId === folder.id && dragOverIndex === ruleIdx ? dragDirection : null}
+                            isDragOver={dragOverFolderId === folder.id && dragOverIndex === ruleIdx}
+                            dragDirection={dragOverFolderId === folder.id && dragOverIndex === ruleIdx ? dragDirection : null}
                           />
                         ))}
                       </div>

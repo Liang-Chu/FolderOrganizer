@@ -67,22 +67,22 @@ pub fn update_rule(
 
     config::save_config(&config)?;
 
-    // Reconcile scheduled deletions when a rule changes
+    // Reconcile scheduled actions when a rule changes
     match (&old_rule.action, &rule.action) {
-        // Delete → Delete: if after_days changed, update all pending deletions
+        // Delete → Delete: if delay_minutes changed, update all pending scheduled entries
         (
-            config::Action::Delete { after_days: old_days },
-            config::Action::Delete { after_days: new_days },
+            config::Action::Delete { delay_minutes: old_mins, .. },
+            config::Action::Delete { delay_minutes: new_mins, .. },
         ) => {
-            if old_days != new_days {
-                let _ = state.db.update_scheduled_deletion_days(
+            if old_mins != new_mins {
+                let _ = state.db.update_scheduled_deletion_delay(
                     &folder_id,
                     &rule.name,
-                    *new_days,
+                    *new_mins,
                 );
                 log::info!(
-                    "Updated scheduled deletions for rule '{}': {} days → {} days",
-                    rule.name, old_days, new_days
+                    "Updated scheduled deletions for rule '{}': {} min → {} min",
+                    rule.name, old_mins, new_mins
                 );
             }
             // If condition or name changed, remove old and rescan
@@ -90,16 +90,35 @@ pub fn update_rule(
                 let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
             }
         }
-        // Delete → Move: remove all scheduled deletions for this rule
-        (config::Action::Delete { .. }, config::Action::Move { .. }) => {
+        // Move → Move (with delay): if delay_minutes changed, update pending entries
+        (
+            config::Action::Move { delay_minutes: old_mins, .. },
+            config::Action::Move { delay_minutes: new_mins, .. },
+        ) => {
+            if old_mins != new_mins {
+                let _ = state.db.update_scheduled_deletion_delay(
+                    &folder_id,
+                    &rule.name,
+                    *new_mins,
+                );
+                log::info!(
+                    "Updated scheduled moves for rule '{}': {} min → {} min",
+                    rule.name, old_mins, new_mins
+                );
+            }
+            if old_rule.condition_text != rule.condition_text || old_rule.name != rule.name {
+                let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
+            }
+        }
+        // Delete → Move or Move → Delete: clear all scheduled entries for this rule
+        (config::Action::Delete { .. }, config::Action::Move { .. })
+        | (config::Action::Move { .. }, config::Action::Delete { .. }) => {
             let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
             log::info!(
-                "Cleared scheduled deletions for rule '{}' (changed to Move)",
+                "Cleared scheduled actions for rule '{}' (action type changed)",
                 old_rule.name
             );
         }
-        // Move → Delete or Move → Move: nothing to reconcile for scheduled deletions
-        _ => {}
     }
 
     Ok(())
@@ -217,4 +236,60 @@ pub fn copy_rules_to_folder(
 
     config::save_config(&config)?;
     Ok(count)
+}
+
+/// Move a rule from one folder to another at a specific position.
+#[tauri::command]
+pub fn move_rule_to_folder(
+    state: State<AppState>,
+    source_folder_id: String,
+    target_folder_id: String,
+    rule_id: String,
+    position: usize,
+) -> Result<(), String> {
+    let mut config = state.config.lock().map_err(|e| e.to_string())?;
+
+    // Find and remove rule from source folder
+    let source = config
+        .folders
+        .iter_mut()
+        .find(|f| f.id == source_folder_id)
+        .ok_or("Source folder not found")?;
+
+    let rule_idx = source
+        .rules
+        .iter()
+        .position(|r| r.id() == rule_id)
+        .ok_or("Rule not found in source folder")?;
+    let rule = source.rules.remove(rule_idx);
+    let rule_name = rule.name.clone();
+    let rule_id_str = rule.id.clone();
+
+    // Insert into target folder at position
+    let target = config
+        .folders
+        .iter_mut()
+        .find(|f| f.id == target_folder_id)
+        .ok_or("Target folder not found")?;
+
+    let pos = position.min(target.rules.len());
+    target.rules.insert(pos, rule);
+
+    config::save_config(&config)?;
+
+    // Clean up scheduled entries from old folder
+    let _ = state
+        .db
+        .remove_scheduled_deletions_by_rule(&source_folder_id, &rule_name);
+
+    // Update metadata
+    let _ = state.db.delete_rule_metadata(&rule_id_str, &source_folder_id);
+    let now = chrono::Utc::now()
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    let _ = state
+        .db
+        .insert_rule_metadata(&rule_id_str, &target_folder_id, &now);
+
+    Ok(())
 }
