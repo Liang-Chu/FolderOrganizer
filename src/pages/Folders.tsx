@@ -203,6 +203,10 @@ export default function Folders() {
       await api.toggleWatchedFolder(id, enabled);
       await loadFolders();
       await api.restartWatcher().catch(() => {});
+      // Scan the folder when re-enabled so existing files are evaluated
+      if (enabled) {
+        api.scanFolder(id).catch(() => {});
+      }
     } finally {
       setBusy(false);
     }
@@ -299,12 +303,16 @@ export default function Folders() {
       setEditingFolderId(null);
     }
     await loadFolders();
+    // Rescan: remaining rules may now match files the deleted rule was handling
+    api.scanFolder(folderId).catch(() => {});
   };
 
   const handleToggleRule = async (folderId: string, rule: Rule) => {
     const updated = { ...rule, enabled: !rule.enabled };
     await api.updateRule(folderId, updated);
     await loadFolders();
+    // Rescan so enabling/disabling takes effect on existing files
+    api.scanFolder(folderId).catch(() => {});
   };
 
   const handleToggleRuleSubdirs = async (folderId: string, rule: Rule) => {
@@ -312,6 +320,8 @@ export default function Folders() {
     await api.updateRule(folderId, updated);
     await loadFolders();
     await api.restartWatcher().catch(() => {});
+    // Rescan: subdirectory matching changes which files are evaluated
+    api.scanFolder(folderId).catch(() => {});
   };
 
   const handleEditRule = (folderId: string, rule: Rule) => {
@@ -480,6 +490,8 @@ export default function Folders() {
     if (!importTargetFolderId) return;
     await api.copyRulesToFolder(importTargetFolderId, sources);
     await loadFolders();
+    // Scan folder so imported rules evaluate existing files
+    api.scanFolder(importTargetFolderId).catch(() => {});
   };
 
   // ── Whitelist ──
@@ -487,6 +499,8 @@ export default function Folders() {
   const handleSaveWhitelist = async (folderId: string, whitelist: string[]) => {
     await api.setFolderWhitelist(folderId, whitelist);
     await loadFolders();
+    // Rescan: whitelist changes affect which files are skipped
+    api.scanFolder(folderId).catch(() => {});
   };
 
   const addWhitelistPattern = async (folderId: string) => {

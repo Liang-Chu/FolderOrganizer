@@ -36,7 +36,7 @@ pub enum EvalOutcome {
 }
 
 /// Check if a filename matches any glob pattern in a whitelist.
-fn is_whitelisted(file_name: &str, whitelist: &[String]) -> bool {
+pub fn is_whitelisted(file_name: &str, whitelist: &[String]) -> bool {
     let name_lower = file_name.to_lowercase();
     for pattern in whitelist {
         if glob_match(&pattern.to_lowercase(), &name_lower) {

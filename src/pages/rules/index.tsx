@@ -52,6 +52,8 @@ export default function Rules() {
     setEditingRule(null);
     setIsNewRule(false);
     setRules(await api.getRules(selectedFolderId));
+    // Trigger a rescan so changes (whitelist, conditions, etc.) take effect immediately
+    api.scanFolder(selectedFolderId).catch(() => {});
   };
 
   const handleDeleteRule = async (ruleId: string) => {
@@ -62,6 +64,8 @@ export default function Rules() {
       setIsNewRule(false);
     }
     setRules(await api.getRules(selectedFolderId));
+    // Rescan: remaining rules may now match files the deleted rule was handling
+    api.scanFolder(selectedFolderId).catch(() => {});
   };
 
   const handleToggleRule = async (rule: Rule) => {
@@ -69,6 +73,8 @@ export default function Rules() {
     const updated = { ...rule, enabled: !rule.enabled };
     await api.updateRule(selectedFolderId, updated);
     setRules(await api.getRules(selectedFolderId));
+    // Rescan so enabling/disabling takes effect on existing files
+    api.scanFolder(selectedFolderId).catch(() => {});
   };
 
   const handleImportRules = async (
@@ -80,6 +86,8 @@ export default function Rules() {
     setRules(await api.getRules(selectedFolderId));
     const updatedFolders = await api.getWatchedFolders();
     setFolders(updatedFolders);
+    // Scan folder so imported rules evaluate existing files
+    api.scanFolder(selectedFolderId).catch(() => {});
   };
 
   // Check if other folders have rules to import

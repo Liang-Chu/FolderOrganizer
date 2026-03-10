@@ -8,7 +8,6 @@ mod watcher;
 
 use std::sync::{Arc, Mutex};
 
-use chrono::Timelike;
 use commands::AppState;
 use tauri::{Emitter, Manager};
 
@@ -146,22 +145,35 @@ pub fn run() {
             commands::get_db_path,
         ])
         .setup(move |app| {
-            // ── Start periodic scheduler (maintenance + daily deletion check) ──
+            // ── Start periodic scheduler (maintenance + process due actions + daily scan) ──
             {
                 let scheduler_config = scheduler_config.clone();
                 let scheduler_db = scheduler_db.clone();
                 let app_handle = app.handle().clone();
                 std::thread::spawn(move || {
-                    let mut last_deletion_day: Option<u32> = None;
+                    let mut last_full_scan_day: Option<u32> = None;
                     loop {
-                        let (interval, deletion_hour) = {
+                        let interval = {
                             let cfg = scheduler_config.lock().unwrap();
                             // Enforce minimum 1 minute interval
-                            (cfg.settings.scan_interval_minutes.max(1), cfg.settings.deletion_time_hour)
+                            cfg.settings.scan_interval_minutes.max(1)
                         };
-                        std::thread::sleep(std::time::Duration::from_secs(
-                            (interval as u64) * 60,
-                        ));
+
+                        // Track wall-clock time to detect system sleep/standby.
+                        // If thread::sleep(5 min) actually takes >> 5 min, the system
+                        // was likely asleep and we should process immediately.
+                        let sleep_duration = std::time::Duration::from_secs((interval as u64) * 60);
+                        let before_sleep = std::time::Instant::now();
+                        std::thread::sleep(sleep_duration);
+                        let actual_elapsed = before_sleep.elapsed();
+
+                        let system_was_sleeping = actual_elapsed > sleep_duration + std::time::Duration::from_secs(60);
+                        if system_was_sleeping {
+                            log::info!(
+                                "System appears to have been sleeping (slept {}s instead of {}s), processing immediately",
+                                actual_elapsed.as_secs(), sleep_duration.as_secs()
+                            );
+                        }
 
                         // Run maintenance (log pruning, undo cleanup, storage enforcement)
                         {
@@ -169,17 +181,33 @@ pub fn run() {
                             scheduler::run_scheduled_cleanup(&cfg, &scheduler_db);
                         }
 
-                        // Check if it's time to run daily deletions
-                        let now = chrono::Local::now();
-                        let today = now.format("%j").to_string().parse::<u32>().unwrap_or(0); // day of year
-                        let current_hour = now.hour();
-
-                        if current_hour >= deletion_hour && last_deletion_day != Some(today) {
-                            log::info!("Running daily scheduled deletions (hour: {}, configured: {})", current_hour, deletion_hour);
+                        // Process due scheduled actions (deletions & moves) on EVERY cycle.
+                        // Each entry's `due_at` timestamp gates when it actually executes,
+                        // so running this frequently is safe and ensures timely processing.
+                        {
                             let cfg = scheduler_config.lock().unwrap().clone();
-                            scheduler::process_due_deletions_with_config(&scheduler_db, Some(&cfg));
+                            let processed = scheduler::process_due_deletions_with_config(&scheduler_db, Some(&cfg));
+                            if processed > 0 {
+                                log::info!("Processed {} due scheduled actions", processed);
+                                let _ = app_handle.emit("dashboard-data-changed", ());
+                            }
+                        }
+
+                        // Daily full scan at midnight — catches anything the watcher missed
+                        // (e.g. files added during sleep, network drives reconnecting, etc.)
+                        // Also triggers immediately after system wake from sleep.
+                        let now = chrono::Local::now();
+                        let today = now.format("%j").to_string().parse::<u32>().unwrap_or(0);
+                        let should_daily_scan = last_full_scan_day != Some(today) || system_was_sleeping;
+                        if should_daily_scan {
+                            log::info!("Running daily full scan (day {})", today);
+                            let cfg = scheduler_config.lock().unwrap().clone();
+                            let scanned = scheduler::scan_existing_files(&cfg, &scheduler_db);
+                            if scanned > 0 {
+                                log::info!("Daily scan: {} files matched rules", scanned);
+                            }
                             let _ = app_handle.emit("dashboard-data-changed", ());
-                            last_deletion_day = Some(today);
+                            last_full_scan_day = Some(today);
                         }
                     }
                 });

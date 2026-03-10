@@ -85,8 +85,11 @@ pub fn update_rule(
                     rule.name, old_mins, new_mins
                 );
             }
-            // If condition or name changed, remove old and rescan
-            if old_rule.condition_text != rule.condition_text || old_rule.name != rule.name {
+            // If condition, name, or whitelist changed, remove old and rescan
+            if old_rule.condition_text != rule.condition_text
+                || old_rule.name != rule.name
+                || old_rule.whitelist != rule.whitelist
+            {
                 let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
             }
         }
@@ -106,7 +109,10 @@ pub fn update_rule(
                     rule.name, old_mins, new_mins
                 );
             }
-            if old_rule.condition_text != rule.condition_text || old_rule.name != rule.name {
+            if old_rule.condition_text != rule.condition_text
+                || old_rule.name != rule.name
+                || old_rule.whitelist != rule.whitelist
+            {
                 let _ = state.db.remove_scheduled_deletions_by_rule(&folder_id, &old_rule.name);
             }
         }

@@ -7,6 +7,7 @@ use uuid::Uuid;
 
 use crate::config::AppConfig;
 use crate::db::Database;
+use crate::rules::is_whitelisted;
 
 /// Run the periodic maintenance tasks (log pruning, undo cleanup, storage enforcement).
 /// This runs on the scan_interval_minutes schedule. It does NOT run deletions —
@@ -67,15 +68,24 @@ pub fn process_due_deletions_with_config(
                 if let Some(cfg) = config {
                     let folder = cfg.folders.iter().find(|f| f.id == entry.folder_id);
                     let should_run = match folder {
-                        Some(f) if f.enabled => f.rules.iter().any(|r| {
-                            r.is_enabled()
-                                && r.name == entry.rule_name
-                                && match (&r.action, entry.action_type.as_str()) {
-                                    (crate::config::Action::Delete { .. }, "delete") => true,
-                                    (crate::config::Action::Move { .. }, "move") => true,
-                                    _ => false,
-                                }
-                        }),
+                        Some(f) if f.enabled => {
+                            // Check folder-level whitelist
+                            if is_whitelisted(&entry.file_name, &f.whitelist) {
+                                false
+                            } else {
+                                f.rules.iter().any(|r| {
+                                    r.is_enabled()
+                                        && r.name == entry.rule_name
+                                        // Check rule-level whitelist
+                                        && !is_whitelisted(&entry.file_name, &r.whitelist)
+                                        && match (&r.action, entry.action_type.as_str()) {
+                                            (crate::config::Action::Delete { .. }, "delete") => true,
+                                            (crate::config::Action::Move { .. }, "move") => true,
+                                            _ => false,
+                                        }
+                                })
+                            }
+                        }
                         _ => false,
                     };
 
