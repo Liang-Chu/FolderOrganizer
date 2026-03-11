@@ -67,6 +67,9 @@ function formatDisplayPath(filePath: string): { dir: string; name: string } {
   return { dir: head.join(sep) + sep + ".." + sep + tail.join(sep), name };
 }
 
+// Persist collapsed groups across tab switches (module-level, resets on window close)
+let _savedCollapsedGroups = new Set<string>();
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -74,7 +77,6 @@ export default function Dashboard() {
   const [scheduledDeletions, setScheduledDeletions] = useState<ScheduledDeletion[]>([]);
   const [watcherRunning, setWatcherRunning] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showAllDeletions, setShowAllDeletions] = useState(false);
   const [deletionResult, setDeletionResult] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState<string | null>(null);
@@ -82,8 +84,20 @@ export default function Dashboard() {
   const [sortAsc, setSortAsc] = useState(true);
   const [selectedDeletionIds, setSelectedDeletionIds] = useState<string[]>([]);
   const [deletingSelected, setDeletingSelected] = useState(false);
-  const [groupBy, setGroupBy] = useState<"none" | "date" | "rule" | "folder">("date");
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [groupBy, setGroupByState] = useState<"none" | "date" | "rule" | "folder">("date");
+  const [collapsedGroups, setCollapsedGroupsState] = useState<Set<string>>(_savedCollapsedGroups);
+
+  const setGroupBy = (v: typeof groupBy) => {
+    setGroupByState(v);
+    if (config) {
+      const updated = { ...config, settings: { ...config.settings, dashboard_group_by: v } };
+      setConfig(updated);
+      api.saveConfig(updated);
+    }
+  };
+  const setCollapsedGroups = (fn: (prev: Set<string>) => Set<string>) => {
+    setCollapsedGroupsState((prev) => { const next = fn(prev); _savedCollapsedGroups = next; return next; });
+  };
   const refreshInFlight = useRef(false);
 
   const loadData = useCallback(async () => {
@@ -97,6 +111,9 @@ export default function Dashboard() {
         api.getScheduledDeletions(),
       ]);
       setConfig(cfg);
+      if (cfg.settings.dashboard_group_by) {
+        setGroupByState(cfg.settings.dashboard_group_by);
+      }
       setRecentActivity(log);
       setWatcherRunning(status);
       setScheduledDeletions(deletions);
@@ -223,9 +240,7 @@ export default function Dashboard() {
     return sortAsc ? cmp : -cmp;
   });
 
-  const visibleDeletions = showAllDeletions
-    ? sortedDeletions
-    : sortedDeletions.slice(0, 8);
+  const visibleDeletions = sortedDeletions;
   const allVisibleSelected = visibleDeletions.length > 0 && visibleDeletions.every((entry) => selectedDeletionIds.includes(entry.id));
 
   // Build folder id → path lookup
@@ -410,6 +425,7 @@ export default function Dashboard() {
                 </button>
               </div>
             </div>
+          <div className="max-h-[60vh] overflow-y-auto">
             <table className="w-full text-sm table-fixed">
               <colgroup>
                 <col className="w-[5%]" />
@@ -551,16 +567,10 @@ export default function Dashboard() {
                 })}
               </tbody>
             </table>
+            </div>
             {scheduledDeletions.length > 8 && (
-              <div className="px-5 py-2 border-t border-zinc-800/50">
-                <button
-                  onClick={() => setShowAllDeletions(!showAllDeletions)}
-                  className="text-xs text-amber-400/70 hover:text-amber-300 transition-colors"
-                >
-                  {showAllDeletions
-                    ? t("dashboard.showLess")
-                    : t("dashboard.viewAll") + ` (${scheduledDeletions.length})`}
-                </button>
+              <div className="px-5 py-1.5 border-t border-zinc-800/50 text-xs text-zinc-500 text-center">
+                {scheduledDeletions.length} items
               </div>
             )}
           </div>

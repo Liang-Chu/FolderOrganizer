@@ -73,7 +73,7 @@ impl Database {
 
             CREATE TABLE IF NOT EXISTS scheduled_deletions (
                 id              TEXT PRIMARY KEY,
-                file_path       TEXT NOT NULL UNIQUE,
+                file_path       TEXT NOT NULL,
                 folder_id       TEXT NOT NULL,
                 rule_name       TEXT NOT NULL,
                 file_name       TEXT NOT NULL,
@@ -83,9 +83,11 @@ impl Database {
                 delete_after    TEXT NOT NULL,
                 action_type     TEXT NOT NULL DEFAULT 'delete',
                 move_destination TEXT,
-                keep_source     INTEGER NOT NULL DEFAULT 0
+                keep_source     INTEGER NOT NULL DEFAULT 0,
+                rule_priority   INTEGER NOT NULL DEFAULT 0
             );
 
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_del_file_rule ON scheduled_deletions(file_path, rule_name);
             CREATE INDEX IF NOT EXISTS idx_sched_del_after ON scheduled_deletions(delete_after);
             CREATE INDEX IF NOT EXISTS idx_sched_del_folder ON scheduled_deletions(folder_id);
             ",
@@ -98,6 +100,57 @@ impl Database {
         ");
         let _ = conn.execute_batch("
             ALTER TABLE scheduled_deletions ADD COLUMN keep_source INTEGER NOT NULL DEFAULT 0;
+        ");
+
+        // Migration: drop old UNIQUE on file_path, add composite unique on (file_path, rule_name).
+        // SQLite can't drop inline UNIQUE constraints, so we must recreate the table.
+        // Check if the old unique constraint exists by inspecting table_info.
+        let needs_rebuild: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_index_list('scheduled_deletions') WHERE origin = 'u' AND name LIKE 'sqlite_autoindex%'",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if needs_rebuild {
+            let _ = conn.execute_batch("
+                CREATE TABLE IF NOT EXISTS scheduled_deletions_new (
+                    id              TEXT PRIMARY KEY,
+                    file_path       TEXT NOT NULL,
+                    folder_id       TEXT NOT NULL,
+                    rule_name       TEXT NOT NULL,
+                    file_name       TEXT NOT NULL,
+                    extension       TEXT,
+                    size_bytes      INTEGER,
+                    scheduled_at    TEXT NOT NULL,
+                    delete_after    TEXT NOT NULL,
+                    action_type     TEXT NOT NULL DEFAULT 'delete',
+                    move_destination TEXT,
+                    keep_source     INTEGER NOT NULL DEFAULT 0,
+                    rule_priority   INTEGER NOT NULL DEFAULT 0
+                );
+                INSERT OR IGNORE INTO scheduled_deletions_new
+                    SELECT id, file_path, folder_id, rule_name, file_name, extension, size_bytes,
+                           scheduled_at, delete_after,
+                           COALESCE(action_type, 'delete'),
+                           move_destination,
+                           COALESCE(keep_source, 0),
+                           COALESCE(rule_priority, 0)
+                    FROM scheduled_deletions;
+                DROP TABLE scheduled_deletions;
+                ALTER TABLE scheduled_deletions_new RENAME TO scheduled_deletions;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_sched_del_file_rule ON scheduled_deletions(file_path, rule_name);
+                CREATE INDEX IF NOT EXISTS idx_sched_del_after ON scheduled_deletions(delete_after);
+                CREATE INDEX IF NOT EXISTS idx_sched_del_folder ON scheduled_deletions(folder_id);
+            ");
+            log::info!("Migrated scheduled_deletions table: removed old UNIQUE(file_path), added UNIQUE(file_path, rule_name)");
+        }
+
+        // Migration: add rule_priority column for existing databases
+        let _ = conn.execute_batch("
+            ALTER TABLE scheduled_deletions ADD COLUMN rule_priority INTEGER NOT NULL DEFAULT 0;
         ");
 
         Ok(())

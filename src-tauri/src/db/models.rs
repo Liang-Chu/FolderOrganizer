@@ -72,6 +72,9 @@ pub struct ScheduledDeletion {
     /// Whether to keep the source file after copying (copy mode)
     #[serde(default)]
     pub keep_source: bool,
+    /// Rule index in the folder's rule list (lower = higher priority)
+    #[serde(default)]
+    pub rule_priority: u32,
 }
 
 fn default_action_type() -> String {

@@ -19,6 +19,8 @@ export interface AppSettings {
   deletion_time_hour: number;
   /** Update mode: 'off' = version freeze, 'notify' = notify only, 'auto' = silent auto-update */
   update_mode: 'off' | 'notify' | 'auto';
+  /** Dashboard scheduled actions grouping: 'none' | 'date' | 'rule' | 'folder' */
+  dashboard_group_by: 'none' | 'date' | 'rule' | 'folder';
 }
 
 export interface WatchedFolder {

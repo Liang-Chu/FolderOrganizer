@@ -46,6 +46,9 @@ pub struct AppSettings {
     /// Update mode: "off" = frozen, "notify" = check & notify, "auto" = silent update
     #[serde(default = "default_update_mode")]
     pub update_mode: String,
+    /// Dashboard grouping preference: "none", "date", "rule", "folder"
+    #[serde(default = "default_dashboard_group_by")]
+    pub dashboard_group_by: String,
 }
 
 fn default_sort_root() -> PathBuf {
@@ -66,6 +69,10 @@ fn default_update_mode() -> String {
     "notify".to_string()
 }
 
+fn default_dashboard_group_by() -> String {
+    "date".to_string()
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -78,6 +85,7 @@ impl Default for AppSettings {
             default_sort_root: default_sort_root(),
             deletion_time_hour: default_deletion_time_hour(),
             update_mode: default_update_mode(),
+            dashboard_group_by: default_dashboard_group_by(),
         }
     }
 }

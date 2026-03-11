@@ -99,6 +99,15 @@ fn is_file_in_dir(file_path: &Path, dir: &Path) -> bool {
 
 /// Evaluate a single file against a folder's rules (in priority order).
 /// Returns full outcome including scheduled deletions.
+///
+/// **Scheduling logic:**
+/// - `keep_source` (copy-mode) Move rules are non-destructive: they always schedule
+///   independently and evaluation continues to subsequent rules.
+/// - Destructive rules (Delete, cut-mode Move) will eventually remove the file from
+///   the watched folder. Among all matching destructive rules, only the **winner** is
+///   scheduled — the one that fires earliest (shortest delay). On equal delay, the
+///   rule higher in the list (lower index) wins.
+/// - Immediate cut-mode Move (delay=0) executes immediately and stops evaluation.
 pub fn evaluate_file_full(
     file_path: &Path,
     folder: &WatchedFolder,
@@ -115,7 +124,25 @@ pub fn evaluate_file_full(
         return EvalOutcome::NoMatch;
     }
 
-    for rule in &folder.rules {
+    // Track the first outcome to return
+    let mut first_outcome: Option<EvalOutcome> = None;
+
+    // Among destructive rules, find the winner: earliest fire time, tie-break by list order.
+    // We collect the winner during the loop, then schedule it after.
+    // Copies are also collected and only scheduled if they fire before the destructive winner.
+    struct DestructiveCandidate {
+        rule_index: usize,
+        delay_minutes: u32,
+    }
+    struct CopyCandidate {
+        rule_index: usize,
+        delay_minutes: u32,
+        dest_str: String,
+    }
+    let mut best_destructive: Option<DestructiveCandidate> = None;
+    let mut copy_candidates: Vec<CopyCandidate> = Vec::new();
+
+    for (rule_index, rule) in folder.rules.iter().enumerate() {
         if !rule.is_enabled() {
             continue;
         }
@@ -132,10 +159,6 @@ pub fn evaluate_file_full(
             }
         }
 
-        // Matching behavior:
-        //   - match_subdirectories=true  → evaluate against relative file path
-        //   - match_subdirectories=false → evaluate against the entry name (filename or folder name).
-        //     Folders and files that are direct children of the watched folder are matched by name.
         let matched = if rule.match_subdirectories {
             let relative_path = file_path
                 .strip_prefix(&folder.path)
@@ -144,7 +167,6 @@ pub fn evaluate_file_full(
                 .replace('\\', "/");
             condition::evaluate(&rule.condition, &relative_path)
         } else {
-            // file_name is the last component — works for both files and directories
             condition::evaluate(&rule.condition, &file_name)
         };
 
@@ -152,47 +174,145 @@ pub fn evaluate_file_full(
             continue;
         }
 
-        // Condition matched — execute the action
+        // Condition matched — decide what to do based on action type
         match &rule.action {
-            Action::Move { delay_minutes, keep_source, .. } if *delay_minutes > 0 => {
-                // Scheduled move
-                let destination = if let Action::Move { ref destination, .. } = rule.action {
-                    destination.to_string_lossy().to_string()
+            Action::Move { delay_minutes, keep_source, destination } if *keep_source => {
+                // Copy mode: non-destructive, collect for later (schedule only if it fires before destructive winner)
+                let dest_file = destination.join(&file_name);
+                if dest_file.exists() {
+                    continue; // Already copied
+                }
+
+                if *delay_minutes > 0 {
+                    copy_candidates.push(CopyCandidate {
+                        rule_index,
+                        delay_minutes: *delay_minutes,
+                        dest_str: destination.to_string_lossy().to_string(),
+                    });
                 } else {
-                    unreachable!()
+                    // Immediate copy — always execute
+                    let result = execute_action(file_path, &file_name, rule, folder, db);
+                    let outcome = EvalOutcome::Action(result);
+                    if first_outcome.is_none() {
+                        first_outcome = Some(outcome);
+                    }
+                }
+                continue;
+            }
+            Action::Move { delay_minutes: 0, .. } => {
+                // Immediate cut-mode move — execute now, file is consumed, stop evaluation
+                return EvalOutcome::Action(execute_action(file_path, &file_name, rule, folder, db));
+            }
+            Action::Move { delay_minutes, .. } => {
+                // Scheduled cut-mode move — destructive candidate
+                let dominated = match &best_destructive {
+                    Some(best) => *delay_minutes >= best.delay_minutes,
+                    None => false,
                 };
+                if !dominated {
+                    best_destructive = Some(DestructiveCandidate { rule_index, delay_minutes: *delay_minutes });
+                }
+            }
+            Action::Delete { delay_minutes, .. } => {
+                // Scheduled delete — destructive candidate
+                let dominated = match &best_destructive {
+                    Some(best) => *delay_minutes >= best.delay_minutes,
+                    None => false,
+                };
+                if !dominated {
+                    best_destructive = Some(DestructiveCandidate { rule_index, delay_minutes: *delay_minutes });
+                }
+            }
+        }
+    }
+
+    // Schedule the winning destructive rule (if any) and remove stale losers
+    if let Some(ref winner) = best_destructive {
+        let rule = &folder.rules[winner.rule_index];
+        let file_path_str = file_path.to_string_lossy().to_string();
+
+        // Remove any previously-scheduled destructive entries from losing rules
+        let _ = db.remove_losers_for_file(&file_path_str, &rule.name);
+
+        match &rule.action {
+            Action::Move { delay_minutes, destination, .. } => {
+                let dest_str = destination.to_string_lossy().to_string();
                 let newly_inserted = schedule_action(
-                    file_path, &file_name, rule, folder, db, *delay_minutes, "move", Some(&destination), *keep_source,
+                    file_path, &file_name, rule, folder, db, *delay_minutes, "move", Some(&dest_str), false, winner.rule_index as u32,
                 );
-                return EvalOutcome::Scheduled {
-                    file_path: file_path.to_string_lossy().to_string(),
+                let outcome = EvalOutcome::Scheduled {
+                    file_path: file_path_str,
                     file_name: file_name.clone(),
                     rule_name: rule.name.clone(),
                     newly_inserted,
                     action_type: "scheduled_move".to_string(),
-                    details: Some(format!("→ {}", destination)),
+                    details: Some(format!("→ {}", dest_str)),
                 };
-            }
-            Action::Move { .. } => {
-                return EvalOutcome::Action(execute_action(file_path, &file_name, rule, folder, db));
+                if first_outcome.is_none() {
+                    first_outcome = Some(outcome);
+                }
             }
             Action::Delete { delay_minutes, .. } => {
                 let newly_inserted = schedule_action(
-                    file_path, &file_name, rule, folder, db, *delay_minutes, "delete", None, false,
+                    file_path, &file_name, rule, folder, db, *delay_minutes, "delete", None, false, winner.rule_index as u32,
                 );
-                return EvalOutcome::Scheduled {
-                    file_path: file_path.to_string_lossy().to_string(),
+                let outcome = EvalOutcome::Scheduled {
+                    file_path: file_path_str,
                     file_name: file_name.clone(),
                     rule_name: rule.name.clone(),
                     newly_inserted,
                     action_type: "scheduled_delete".to_string(),
                     details: None,
                 };
+                if first_outcome.is_none() {
+                    first_outcome = Some(outcome);
+                }
             }
+        }
+    } else {
+        // No destructive winner — remove any stale destructive entries for this file
+        // (e.g. all destructive rules were disabled or no longer match)
+        let file_path_str = file_path.to_string_lossy().to_string();
+        let _ = db.remove_losers_for_file(&file_path_str, "");
+    }
+
+    // Schedule copies that fire before the destructive winner.
+    // A copy is dominated (suppressed) if:
+    //   - its delay > destructive delay (fires after destruction), OR
+    //   - its delay == destructive delay AND it's listed after the destructive rule
+    //     (scheduler uses rule_priority = list index, so higher index executes later)
+    // If no destructive winner, all copies are valid.
+    for copy in &copy_candidates {
+        let dominated = match &best_destructive {
+            Some(w) => {
+                copy.delay_minutes > w.delay_minutes
+                    || (copy.delay_minutes == w.delay_minutes && copy.rule_index > w.rule_index)
+            }
+            None => false,
+        };
+        if dominated {
+            // This copy would fire at or after the destructive action — skip it and remove any stale entry
+            let _ = db.remove_scheduled_deletions_by_rule(&folder.id, &folder.rules[copy.rule_index].name);
+            continue;
+        }
+        let rule = &folder.rules[copy.rule_index];
+        let newly_inserted = schedule_action(
+            file_path, &file_name, rule, folder, db, copy.delay_minutes, "move", Some(&copy.dest_str), true, copy.rule_index as u32,
+        );
+        let outcome = EvalOutcome::Scheduled {
+            file_path: file_path.to_string_lossy().to_string(),
+            file_name: file_name.clone(),
+            rule_name: rule.name.clone(),
+            newly_inserted,
+            action_type: "scheduled_move".to_string(),
+            details: Some(format!("→ {}", copy.dest_str)),
+        };
+        if first_outcome.is_none() {
+            first_outcome = Some(outcome);
         }
     }
 
-    EvalOutcome::NoMatch
+    first_outcome.unwrap_or(EvalOutcome::NoMatch)
 }
 
 /// Schedule a file for a future action (delete or move) by inserting into the scheduled_deletions table.
@@ -208,6 +328,7 @@ fn schedule_action(
     action_type: &str,
     move_destination: Option<&str>,
     keep_source: bool,
+    rule_priority: u32,
 ) -> bool {
     let now = Utc::now();
     let execute_after = now + chrono::Duration::minutes(delay_minutes as i64);
@@ -229,6 +350,7 @@ fn schedule_action(
         action_type,
         move_destination,
         keep_source,
+        rule_priority,
     );
 
     match inserted {

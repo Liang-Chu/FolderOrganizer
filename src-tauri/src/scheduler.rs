@@ -61,10 +61,17 @@ pub fn process_due_deletions_with_config(
     let now = Utc::now();
     let now_str = now.format("%Y-%m-%d %H:%M:%S").to_string();
     let mut count = 0u32;
+    // Track file paths already consumed by a destructive action in this batch
+    let mut consumed_paths: HashSet<String> = HashSet::new();
 
     match db.get_due_deletions(&now_str) {
         Ok(due) => {
             for entry in due {
+                // Skip if this file was already consumed by an earlier destructive action
+                if consumed_paths.contains(&entry.file_path) {
+                    continue;
+                }
+
                 if let Some(cfg) = config {
                     let folder = cfg.folders.iter().find(|f| f.id == entry.folder_id);
                     let should_run = match folder {
@@ -90,14 +97,16 @@ pub fn process_due_deletions_with_config(
                     };
 
                     if !should_run {
-                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                        let _ = db.cancel_scheduled_deletion(&entry.id);
                         continue;
                     }
                 }
 
                 let path = Path::new(&entry.file_path);
                 if !path.exists() {
+                    // File is gone — remove ALL scheduled entries for this path
                     let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                    consumed_paths.insert(entry.file_path.clone());
                     continue;
                 }
 
@@ -139,7 +148,14 @@ pub fn process_due_deletions_with_config(
                 );
                 if success {
                     count += 1;
-                    let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                    if is_move && entry.keep_source {
+                        // Copy mode: only remove this specific entry — other rules' entries survive
+                        let _ = db.cancel_scheduled_deletion(&entry.id);
+                    } else {
+                        // Destructive action (delete or cut-move): file is gone, remove all entries
+                        let _ = db.remove_scheduled_deletion_by_path(&entry.file_path);
+                        consumed_paths.insert(entry.file_path.clone());
+                    }
                 }
             }
         }
@@ -458,6 +474,17 @@ pub fn scan_existing_files(
         }
     }
 
+    // Clean up scheduled entries for files that no longer exist
+    for folder in &config.folders {
+        if !folder.enabled {
+            continue;
+        }
+        let removed = db.cleanup_missing_files_for_folder(&folder.id);
+        if removed > 0 {
+            log::info!("Cleaned up {} stale scheduled entries for folder {}", removed, folder.path.display());
+        }
+    }
+
     log::info!("Folder scan completed ({} files processed)", total_processed);
     total_processed
 }
@@ -536,6 +563,12 @@ pub fn scan_single_folder(
                 log::error!("Panic while processing file {}: {:?}", path.display(), e);
             }
         }
+    }
+
+    // Clean up scheduled entries for files that no longer exist in this folder
+    let removed = db.cleanup_missing_files_for_folder(&folder.id);
+    if removed > 0 {
+        log::info!("Cleaned up {} stale scheduled entries for folder {}", removed, folder.path.display());
     }
 
     log::info!("Single folder scan completed for {} ({} files processed)", folder_id, total_processed);
