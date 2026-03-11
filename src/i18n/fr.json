@@ -12,6 +12,10 @@
     "data": "Données",
     "settings": "Paramètres"
   },
+  "sidebar": {
+    "feedback": "Demande de fonctionnalité / Rapport de bug",
+    "copyEmail": "Copier l'e-mail"
+  },
   "dashboard": {
     "title": "Tableau de bord",
     "scanNow": "Analyser maintenant",
@@ -238,8 +242,6 @@
     "logRetentionDesc": "Nombre de jours de conservation des journaux (les anciens sont supprimés)",
     "maxStorage": "Taille maximale de stockage",
     "maxStorageDesc": "Taille maximale de la base en Mo (0 = illimité, défaut 2048 = 2 Go)",
-    "deletionTime": "Heure de suppression",
-    "deletionTimeDesc": "Heure du jour (0-23) à laquelle les suppressions programmées s'exécutent automatiquement",
     "autoUpdate": "Mise à jour automatique",
     "autoUpdateDesc": "Vérifier et notifier automatiquement les nouvelles versions",
     "updateMode": "Mode de mise à jour",

@@ -140,6 +140,7 @@ pub fn run() {
             commands::test_condition,
             commands::get_db_stats,
             commands::query_db_table,
+            commands::get_column_values,
             commands::clear_db_table,
             commands::enforce_storage_limit,
             commands::get_db_path,

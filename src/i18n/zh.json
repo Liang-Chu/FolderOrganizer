@@ -12,6 +12,10 @@
     "data": "数据",
     "settings": "设置"
   },
+  "sidebar": {
+    "feedback": "功能请求 / 问题反馈",
+    "copyEmail": "复制邮箱"
+  },
   "dashboard": {
     "title": "仪表盘",
     "scanNow": "立即扫描",
@@ -240,8 +244,7 @@
     "logRetentionDesc": "活动日志保留天数（超期自动删除）",
     "maxStorage": "最大存储空间",
     "maxStorageDesc": "数据库最大容量（MB），0 = 不限，默认 2048 = 2 GB",
-    "deletionTime": "删除时间",
-    "deletionTimeDesc": "每天自动执行计划删除的时间（0-23 小时）",    "autoUpdate": "自动更新",
+    "autoUpdate": "自动更新",
     "autoUpdateDesc": "自动检查并通知新版本",
     "updateMode": "更新模式",
     "updateModeDesc": "控制应用如何处理更新",

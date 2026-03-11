@@ -14,7 +14,7 @@ pub fn get_db_stats(state: State<AppState>) -> Result<DbStats, String> {
     })
 }
 
-/// Query a specific table with pagination and optional search.
+/// Query a specific table with pagination, search, sorting, and column filters.
 #[tauri::command]
 pub fn query_db_table(
     state: State<AppState>,
@@ -22,6 +22,9 @@ pub fn query_db_table(
     limit: Option<u32>,
     offset: Option<u32>,
     search: Option<String>,
+    sort_column: Option<String>,
+    sort_asc: Option<bool>,
+    filters: Option<std::collections::HashMap<String, Vec<String>>>,
 ) -> Result<TableQueryResult, String> {
     state
         .db
@@ -30,7 +33,23 @@ pub fn query_db_table(
             limit.unwrap_or(50),
             offset.unwrap_or(0),
             search.as_deref(),
+            sort_column.as_deref(),
+            sort_asc.unwrap_or(false),
+            filters.as_ref(),
         )
+        .map_err(|e| e.to_string())
+}
+
+/// Get distinct values for a column in a table.
+#[tauri::command]
+pub fn get_column_values(
+    state: State<AppState>,
+    table: String,
+    column: String,
+) -> Result<Vec<String>, String> {
+    state
+        .db
+        .get_column_values(&table, &column)
         .map_err(|e| e.to_string())
 }
 

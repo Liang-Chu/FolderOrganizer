@@ -12,6 +12,10 @@
     "data": "Data",
     "settings": "Settings"
   },
+  "sidebar": {
+    "feedback": "Feature Request / Bug Report",
+    "copyEmail": "Copy email"
+  },
   "dashboard": {
     "title": "Dashboard",
     "scanNow": "Scan Now",
@@ -240,8 +244,6 @@
     "logRetentionDesc": "Days to keep activity log entries (older entries are auto-deleted)",
     "maxStorage": "Max Storage Size",
     "maxStorageDesc": "Maximum database size in MB (0 = unlimited, default 2048 = 2 GB)",
-    "deletionTime": "Deletion Time",
-    "deletionTimeDesc": "Hour of day (0-23) when scheduled file deletions automatically run",
     "autoUpdate": "Auto-update",
     "autoUpdateDesc": "Automatically check for and notify about new versions",
     "updateMode": "Update Mode",

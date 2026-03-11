@@ -178,14 +178,21 @@ export const getRuleExecutionStats = (folderId: string) =>
 /** Get DB stats: file size, trash size, per-table row counts. */
 export const getDbStats = () => invoke<DbStats>("get_db_stats");
 
-/** Query a specific table with pagination and optional search. */
+/** Query a specific table with pagination, search, sorting, and column filters. */
 export const queryDbTable = (
   table: string,
   limit?: number,
   offset?: number,
-  search?: string
+  search?: string,
+  sortColumn?: string,
+  sortAsc?: boolean,
+  filters?: Record<string, string[]>
 ) =>
-  invoke<TableQueryResult>("query_db_table", { table, limit, offset, search });
+  invoke<TableQueryResult>("query_db_table", { table, limit, offset, search, sortColumn, sortAsc, filters });
+
+/** Get distinct values for a column in a table (for filter dropdowns). */
+export const getColumnValues = (table: string, column: string) =>
+  invoke<string[]>("get_column_values", { table, column });
 
 /** Clear all rows from a specific table. Returns count deleted. */
 export const clearDbTable = (table: string) =>

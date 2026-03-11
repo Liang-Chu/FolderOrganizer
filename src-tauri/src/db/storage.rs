@@ -35,13 +35,17 @@ impl Database {
         Ok(stats)
     }
 
-    /// Query any table with pagination. Returns column names + rows as string arrays.
+    /// Query any table with pagination, search, sorting, and column filters.
+    /// `filters` is a map of column_name -> list of allowed values.
     pub fn query_table(
         &self,
         table: &str,
         limit: u32,
         offset: u32,
         search: Option<&str>,
+        sort_column: Option<&str>,
+        sort_asc: bool,
+        filters: Option<&std::collections::HashMap<String, Vec<String>>>,
     ) -> Result<TableQueryResult> {
         // Whitelist tables to prevent SQL injection
         let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata", "scheduled_deletions"];
@@ -54,32 +58,71 @@ impl Database {
 
         let conn = self.conn.lock().unwrap();
 
-        // Get total count (with search filter if applicable)
-        let (count_sql, query_sql) = if let Some(term) = search {
+        let col_names = self.get_column_names_inner(&conn, table)?;
+
+        // Build WHERE clauses
+        let mut where_parts: Vec<String> = Vec::new();
+
+        // Text search across all columns
+        if let Some(term) = search {
             let like = format!("%{}%", term.replace('%', "\\%").replace('_', "\\_"));
-            // Search across all text columns — get column names first
-            let col_names = self.get_column_names_inner(&conn, table)?;
-            let where_clause: String = col_names
+            let search_clause: String = col_names
                 .iter()
                 .map(|c| format!("CAST({} AS TEXT) LIKE '{}' ESCAPE '\\'", c, like))
                 .collect::<Vec<_>>()
                 .join(" OR ");
-            (
-                format!("SELECT COUNT(*) FROM {} WHERE {}", table, where_clause),
-                format!(
-                    "SELECT * FROM {} WHERE {} ORDER BY rowid DESC LIMIT {} OFFSET {}",
-                    table, where_clause, limit, offset
-                ),
-            )
+            where_parts.push(format!("({})", search_clause));
+        }
+
+        // Column-specific filters (multi-select: column IN (value1, value2, ...))
+        if let Some(filter_map) = filters {
+            for (col, values) in filter_map {
+                if values.is_empty() {
+                    continue;
+                }
+                // Validate column name exists to prevent injection
+                if !col_names.contains(col) {
+                    continue;
+                }
+                let has_null = values.iter().any(|v| v == "NULL");
+                let non_null: Vec<_> = values.iter().filter(|v| *v != "NULL").collect();
+                let mut parts = Vec::new();
+                if !non_null.is_empty() {
+                    let escaped: Vec<String> = non_null
+                        .iter()
+                        .map(|v| format!("'{}'", v.replace('\'', "''")))
+                        .collect();
+                    parts.push(format!("CAST({} AS TEXT) IN ({})", col, escaped.join(",")));
+                }
+                if has_null {
+                    parts.push(format!("{} IS NULL", col));
+                }
+                where_parts.push(format!("({})", parts.join(" OR ")));
+            }
+        }
+
+        let where_sql = if where_parts.is_empty() {
+            String::new()
         } else {
-            (
-                format!("SELECT COUNT(*) FROM {}", table),
-                format!(
-                    "SELECT * FROM {} ORDER BY rowid DESC LIMIT {} OFFSET {}",
-                    table, limit, offset
-                ),
-            )
+            format!(" WHERE {}", where_parts.join(" AND "))
         };
+
+        // Sorting
+        let order_sql = if let Some(col) = sort_column {
+            if col_names.contains(&col.to_string()) {
+                format!(" ORDER BY {} {}", col, if sort_asc { "ASC" } else { "DESC" })
+            } else {
+                " ORDER BY rowid DESC".to_string()
+            }
+        } else {
+            " ORDER BY rowid DESC".to_string()
+        };
+
+        let count_sql = format!("SELECT COUNT(*) FROM {}{}", table, where_sql);
+        let query_sql = format!(
+            "SELECT * FROM {}{}{} LIMIT {} OFFSET {}",
+            table, where_sql, order_sql, limit, offset
+        );
 
         let total: i64 = conn.query_row(&count_sql, [], |row| row.get(0))?;
 
@@ -124,6 +167,38 @@ impl Database {
             names.push(col?);
         }
         Ok(names)
+    }
+
+    /// Get distinct values for a column in a table (for filter dropdowns).
+    /// Returns up to 200 distinct values.
+    pub fn get_column_values(&self, table: &str, column: &str) -> Result<Vec<String>> {
+        let allowed_tables = ["activity_log", "file_index", "undo_history", "rule_metadata", "scheduled_deletions"];
+        if !allowed_tables.contains(&table) {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Table '{}' not allowed", table
+            )));
+        }
+        let conn = self.conn.lock().unwrap();
+        let col_names = self.get_column_names_inner(&conn, table)?;
+        if !col_names.contains(&column.to_string()) {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Column '{}' not found", column
+            )));
+        }
+        let sql = format!(
+            "SELECT DISTINCT CAST({} AS TEXT) as val FROM {} ORDER BY val LIMIT 200",
+            column, table
+        );
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map([], |row| {
+            let val: Option<String> = row.get(0)?;
+            Ok(val.unwrap_or_else(|| "NULL".to_string()))
+        })?;
+        let mut values = Vec::new();
+        for row in rows {
+            values.push(row?);
+        }
+        Ok(values)
     }
 
     /// Clear all rows from a specific table.

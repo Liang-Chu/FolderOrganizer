@@ -15,8 +15,6 @@ export interface AppSettings {
   max_storage_mb: number;
   /** Default root directory for sorted files (Move destinations resolve relative to this) */
   default_sort_root: string;
-  /** Hour of day (0-23) when scheduled deletions auto-run (default: 3 = 3 AM) */
-  deletion_time_hour: number;
   /** Update mode: 'off' = version freeze, 'notify' = notify only, 'auto' = silent auto-update */
   update_mode: 'off' | 'notify' | 'auto';
   /** Dashboard scheduled actions grouping: 'none' | 'date' | 'rule' | 'folder' */

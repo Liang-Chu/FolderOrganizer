@@ -272,28 +272,6 @@ export default function SettingsPage() {
           />
         </div>
 
-        {/* Deletion time */}
-        <div className="px-5 py-4 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium">{t("settings.deletionTime")}</p>
-            <p className="text-xs text-zinc-500">
-              {t("settings.deletionTimeDesc")}
-            </p>
-          </div>
-          <input
-            type="number"
-            min={0}
-            max={23}
-            value={settings.deletion_time_hour}
-            onChange={(e) =>
-              setSettings({
-                ...settings,
-                deletion_time_hour: Math.max(0, Math.min(23, parseInt(e.target.value) || 0)),
-              })
-            }
-            className="w-20 px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-sm text-right"
-          />
-        </div>
       </div>
 
       {/* Update mode selector */}
