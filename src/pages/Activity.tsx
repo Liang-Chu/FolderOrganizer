@@ -96,19 +96,20 @@ export default function ActivityPage() {
               <th className="text-left px-5 py-3 font-medium">{t("activity.headerAction")}</th>
               <th className="text-left px-5 py-3 font-medium">{t("activity.headerRule")}</th>
               <th className="text-left px-5 py-3 font-medium">{t("activity.headerResult")}</th>
+              <th className="text-left px-5 py-3 font-medium">{t("activity.headerDetails", "Details")}</th>
               <th className="text-left px-5 py-3 font-medium">{t("activity.headerTime")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
+                <td colSpan={6} className="px-5 py-8 text-center text-zinc-500">
                   {t("common.loading")}
                 </td>
               </tr>
             ) : entries.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-5 py-8 text-center text-zinc-500">
+                <td colSpan={6} className="px-5 py-8 text-center text-zinc-500">
                   {t("activity.noActivity")}
                 </td>
               </tr>
@@ -132,6 +133,9 @@ export default function ActivityPage() {
                     >
                       {entry.result}
                     </span>
+                  </td>
+                  <td className="px-5 py-3 text-zinc-400 max-w-[250px] truncate" title={entry.details ?? undefined}>
+                    {entry.result !== "success" ? (entry.details ?? "—") : (entry.details ?? "")}
                   </td>
                   <td className="px-5 py-3 text-zinc-500">{entry.timestamp}</td>
                 </tr>

@@ -19,6 +19,7 @@ A lightweight desktop application that monitors user-configured folders and auto
 - **Full control of updates**. You own your system, feel free to choose between silent auto-update, update with confirmation, and version freeze.
 ![alt text](image-3.png)
 
+
 ### What it doesn't do
 - **Steal your data**: All data is stored locally. The only time it needs internet access is checking for updates, and you can turn that off.
 - **Modify without logging**: All file operations are logged.

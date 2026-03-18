@@ -198,6 +198,7 @@
     "headerAction": "Action",
     "headerRule": "Rule",
     "headerResult": "Result",
+    "headerDetails": "Details",
     "headerTime": "Time",
     "noActivity": "No activity recorded yet.",
     "previous": "Previous",

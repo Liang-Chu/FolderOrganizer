@@ -111,11 +111,12 @@ pub fn process_due_deletions_with_config(
                 }
 
                 let is_move = entry.action_type == "move";
-                let success = if is_move {
+                let result = if is_move {
                     execute_scheduled_move(path, &entry, db, &now_str)
                 } else {
                     safe_delete(path, db, &now_str, "auto_delete")
                 };
+                let success = result.is_ok();
 
                 let action_label = if is_move {
                     if entry.keep_source { "auto_copy" } else { "auto_move" }
@@ -124,15 +125,15 @@ pub fn process_due_deletions_with_config(
                 };
                 let detail = if is_move {
                     let verb = if entry.keep_source { "copied" } else { "moved" };
-                    if success {
-                        format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?"))
-                    } else {
-                        format!("Failed to {} file", if entry.keep_source { "copy" } else { "move" })
+                    match &result {
+                        Ok(_) => format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?")),
+                        Err(err) => format!("Failed to {} file: {}", if entry.keep_source { "copy" } else { "move" }, err),
                     }
-                } else if success {
-                    "File sent to Recycle Bin".to_string()
                 } else {
-                    "Failed to delete file".to_string()
+                    match &result {
+                        Ok(_) => "File sent to Recycle Bin".to_string(),
+                        Err(err) => format!("Failed to delete file: {}", err),
+                    }
                 };
 
                 let _ = db.insert_activity(
@@ -171,23 +172,24 @@ pub fn process_due_deletions_with_config(
 }
 
 /// Execute a scheduled move action.
+/// Returns Ok on success, Err with a human-readable message on failure.
 fn execute_scheduled_move(
     file_path: &Path,
     entry: &crate::db::ScheduledDeletion,
     db: &Database,
     now_str: &str,
-) -> bool {
+) -> Result<(), String> {
     let destination_str = match &entry.move_destination {
         Some(d) => d.clone(),
         None => {
             log::error!("Scheduled move for {} has no destination", entry.file_path);
-            return false;
+            return Err("No destination configured".to_string());
         }
     };
     let destination = Path::new(&destination_str);
     if let Err(e) = fs::create_dir_all(destination) {
         log::error!("Failed to create destination {}: {}", destination.display(), e);
-        return false;
+        return Err(format!("Failed to create destination: {}", e));
     }
 
     let file_name = file_path.file_name().unwrap_or_default();
@@ -232,11 +234,11 @@ fn execute_scheduled_move(
                     now_str,
                     &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
                 );
-                true
+                Ok(())
             }
             Err(e) => {
                 log::error!("Failed to copy {}: {}", file_path.display(), e);
-                false
+                Err(format!("Copy failed: {}", e))
             }
         };
     }
@@ -253,7 +255,7 @@ fn execute_scheduled_move(
                 now_str,
                 &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
             );
-            true
+            Ok(())
         }
         Err(_) => {
             if file_path.is_dir() {
@@ -271,11 +273,11 @@ fn execute_scheduled_move(
                             now_str,
                             &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
                         );
-                        true
+                        Ok(())
                     }
                     Err(e) => {
                         log::error!("Failed to move dir {}: {}", file_path.display(), e);
-                        false
+                        Err(format!("Move failed: {}", e))
                     }
                 }
             } else {
@@ -294,11 +296,11 @@ fn execute_scheduled_move(
                             now_str,
                             &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
                         );
-                        true
+                        Ok(())
                     }
                     Err(e) => {
                         log::error!("Failed to move {}: {}", file_path.display(), e);
-                        false
+                        Err(format!("Move failed: {}", e))
                     }
                 }
             }
@@ -328,11 +330,12 @@ pub fn process_selected_deletions_now(
                 let is_move = entry.action_type == "move";
 
                 if path.exists() {
-                    let success = if is_move {
+                    let result = if is_move {
                         execute_scheduled_move(path, &entry, db, &now_str)
                     } else {
                         safe_delete(path, db, &now_str, "manual_delete_now")
                     };
+                    let success = result.is_ok();
 
                     let action_label = if is_move {
                         if entry.keep_source { "manual_copy_now" } else { "manual_move_now" }
@@ -341,15 +344,15 @@ pub fn process_selected_deletions_now(
                     };
                     let detail = if is_move {
                         let verb = if entry.keep_source { "copied" } else { "moved" };
-                        if success {
-                            format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?"))
-                        } else {
-                            format!("Failed to {} file", if entry.keep_source { "copy" } else { "move" })
+                        match &result {
+                            Ok(_) => format!("File {} to {}", verb, entry.move_destination.as_deref().unwrap_or("?")),
+                            Err(err) => format!("Failed to {} file: {}", if entry.keep_source { "copy" } else { "move" }, err),
                         }
-                    } else if success {
-                        "File deleted immediately from scheduled list".to_string()
                     } else {
-                        "Failed to delete file".to_string()
+                        match &result {
+                            Ok(_) => "File deleted immediately from scheduled list".to_string(),
+                            Err(err) => format!("Failed to delete file: {}", err),
+                        }
                     };
 
                     let _ = db.insert_activity(
@@ -611,8 +614,8 @@ fn collect_files_inner(dir: &Path, recursive: bool, files: &mut Vec<std::path::P
 }
 
 /// Safe delete: send file to the OS recycle bin.
-/// Returns true on success.
-fn safe_delete(file_path: &Path, db: &Database, now_str: &str, undo_action: &str) -> bool {
+/// Returns Ok on success, Err with a human-readable message on failure.
+fn safe_delete(file_path: &Path, db: &Database, now_str: &str, undo_action: &str) -> Result<(), String> {
     match trash::delete(file_path) {
         Ok(_) => {
             // Undo expires in 7 days (user can restore from Recycle Bin)
@@ -625,11 +628,11 @@ fn safe_delete(file_path: &Path, db: &Database, now_str: &str, undo_action: &str
                 now_str,
                 &expires.format("%Y-%m-%d %H:%M:%S").to_string(),
             );
-            true
+            Ok(())
         }
         Err(e) => {
             log::error!("Failed to recycle {}: {}", file_path.display(), e);
-            false
+            Err(format!("Recycle failed: {}", e))
         }
     }
 }
