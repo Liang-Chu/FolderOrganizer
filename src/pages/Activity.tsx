@@ -1,8 +1,37 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Undo2 } from "lucide-react";
+import { RefreshCw, Undo2, ChevronRight } from "lucide-react";
 import * as api from "../api";
 import type { ActivityLogEntry, UndoEntry } from "../types";
+
+type GroupedActivity = {
+  entry: ActivityLogEntry;
+  retries: ActivityLogEntry[];
+};
+
+/** Group consecutive error entries for the same file_path into collapsible retry groups.
+ *  Entries arrive in DESC timestamp order. A sequence of same-file errors (possibly
+ *  ending with a success) is collapsed into one row with expandable retries. */
+function groupRetries(entries: ActivityLogEntry[]): GroupedActivity[] {
+  const result: GroupedActivity[] = [];
+  let i = 0;
+  while (i < entries.length) {
+    const current = entries[i];
+    const retries: ActivityLogEntry[] = [];
+    let j = i + 1;
+    while (
+      j < entries.length &&
+      entries[j].file_path === current.file_path &&
+      entries[j].result === "error"
+    ) {
+      retries.push(entries[j]);
+      j++;
+    }
+    result.push({ entry: current, retries });
+    i = j;
+  }
+  return result;
+}
 
 export default function ActivityPage() {
   const { t } = useTranslation();
@@ -10,6 +39,7 @@ export default function ActivityPage() {
   const [undoEntries, setUndoEntries] = useState<UndoEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const PAGE_SIZE = 30;
 
   const loadData = async () => {
@@ -114,32 +144,82 @@ export default function ActivityPage() {
                 </td>
               </tr>
             ) : (
-              entries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-zinc-800/50">
-                  <td className="px-5 py-3 max-w-[200px] truncate">
-                    {entry.file_name}
-                  </td>
-                  <td className="px-5 py-3">{entry.action}</td>
-                  <td className="px-5 py-3 text-zinc-400">
-                    {entry.rule_name ?? "—"}
-                  </td>
-                  <td className="px-5 py-3">
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${
-                        entry.result === "success"
-                          ? "bg-green-900/50 text-green-400"
-                          : "bg-red-900/50 text-red-400"
-                      }`}
-                    >
-                      {entry.result}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-zinc-400 max-w-[250px] truncate" title={entry.details ?? undefined}>
-                    {entry.result !== "success" ? (entry.details ?? "—") : (entry.details ?? "")}
-                  </td>
-                  <td className="px-5 py-3 text-zinc-500">{entry.timestamp}</td>
-                </tr>
-              ))
+              groupRetries(entries).map((group) => {
+                const { entry } = group;
+                const hasRetries = group.retries.length > 0;
+                const isExpanded = expandedGroups.has(entry.id);
+                const toggleExpand = () =>
+                  setExpandedGroups((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(entry.id)) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  });
+                return (
+                  <>
+                    <tr key={entry.id} className="hover:bg-zinc-800/50">
+                      <td className="px-5 py-3 max-w-[200px] truncate">
+                        {entry.file_name}
+                      </td>
+                      <td className="px-5 py-3">{entry.action}</td>
+                      <td className="px-5 py-3 text-zinc-400">
+                        {entry.rule_name ?? "—"}
+                      </td>
+                      <td className="px-5 py-3">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            entry.result === "success"
+                              ? "bg-green-900/50 text-green-400"
+                              : "bg-red-900/50 text-red-400"
+                          }`}
+                        >
+                          {entry.result}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3 text-zinc-400 max-w-[250px]">
+                        <div className="truncate" title={entry.details ?? undefined}>
+                          {entry.result !== "success" ? (entry.details ?? "—") : (entry.details ?? "")}
+                        </div>
+                        {hasRetries && (
+                          <button
+                            onClick={toggleExpand}
+                            className="inline-flex items-center gap-1 mt-1 text-xs text-amber-400/80 hover:text-amber-300 transition-colors"
+                          >
+                            <ChevronRight
+                              size={12}
+                              className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                            />
+                            {t("activity.retryCount", { count: group.retries.length })}
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-zinc-500">{entry.timestamp}</td>
+                    </tr>
+                    {hasRetries && isExpanded &&
+                      group.retries.map((retry) => (
+                        <tr key={retry.id} className="bg-zinc-800/30">
+                          <td className="pl-9 pr-5 py-2 max-w-[200px] truncate text-zinc-500 text-xs">
+                            ↳ {retry.file_name}
+                          </td>
+                          <td className="px-5 py-2 text-xs text-zinc-500">{retry.action}</td>
+                          <td className="px-5 py-2 text-xs text-zinc-500">
+                            {retry.rule_name ?? "—"}
+                          </td>
+                          <td className="px-5 py-2">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-red-900/30 text-red-400/70">
+                              {retry.result}
+                            </span>
+                          </td>
+                          <td className="px-5 py-2 text-xs text-zinc-500 max-w-[250px] truncate" title={retry.details ?? undefined}>
+                            {retry.details ?? "—"}
+                          </td>
+                          <td className="px-5 py-2 text-xs text-zinc-600">{retry.timestamp}</td>
+                        </tr>
+                      ))
+                    }
+                  </>
+                );
+              })
             )}
           </tbody>
         </table>

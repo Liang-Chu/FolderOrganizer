@@ -67,6 +67,32 @@ function formatDisplayPath(filePath: string): { dir: string; name: string } {
   return { dir: head.join(sep) + sep + ".." + sep + tail.join(sep), name };
 }
 
+type GroupedActivity = {
+  entry: ActivityLogEntry;
+  retries: ActivityLogEntry[];
+};
+
+function groupRetries(entries: ActivityLogEntry[]): GroupedActivity[] {
+  const result: GroupedActivity[] = [];
+  let i = 0;
+  while (i < entries.length) {
+    const current = entries[i];
+    const retries: ActivityLogEntry[] = [];
+    let j = i + 1;
+    while (
+      j < entries.length &&
+      entries[j].file_path === current.file_path &&
+      entries[j].result === "error"
+    ) {
+      retries.push(entries[j]);
+      j++;
+    }
+    result.push({ entry: current, retries });
+    i = j;
+  }
+  return result;
+}
+
 // Persist collapsed groups across tab switches (module-level, resets on window close)
 let _savedCollapsedGroups = new Set<string>();
 
@@ -86,6 +112,7 @@ export default function Dashboard() {
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [groupBy, setGroupByState] = useState<"none" | "date" | "rule" | "folder">("date");
   const [collapsedGroups, setCollapsedGroupsState] = useState<Set<string>>(_savedCollapsedGroups);
+  const [expandedRetries, setExpandedRetries] = useState<Set<string>>(new Set());
 
   const setGroupBy = (v: typeof groupBy) => {
     setGroupByState(v);
@@ -587,52 +614,90 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="divide-y divide-zinc-800">
-              {recentActivity.map((entry) => {
+              {groupRetries(recentActivity).map((group) => {
+                const { entry } = group;
+                const hasRetries = group.retries.length > 0;
+                const isExpanded = expandedRetries.has(entry.id);
+                const toggleExpand = () =>
+                  setExpandedRetries((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(entry.id)) next.delete(entry.id);
+                    else next.add(entry.id);
+                    return next;
+                  });
                 const { dir, name } = formatDisplayPath(entry.file_path);
                 const destination = extractDestination(entry.details);
                 const destDisplay = destination ? formatDisplayPath(destination) : null;
                 return (
-                  <div
-                    key={entry.id}
-                    className="px-5 py-3 flex items-center justify-between"
-                  >
-                    <div className="min-w-0 flex-1 mr-3">
-                      <button
-                        onClick={() => handleOpenFolder(entry.file_path)}
-                        className="text-left underline decoration-zinc-600 underline-offset-2 hover:decoration-zinc-400 transition-colors cursor-pointer text-sm break-words max-w-full"
-                        title={entry.file_path}
-                      >
-                        <span className="text-zinc-500">{dir}\</span>
-                        <span className="font-medium text-zinc-200">{name}</span>
-                      </button>
-                      {destDisplay && (
+                  <div key={entry.id}>
+                    <div className="px-5 py-3 flex items-center justify-between">
+                      <div className="min-w-0 flex-1 mr-3">
                         <button
-                          onClick={() => handleOpenFolder(destination!)}
-                          className="text-left text-xs text-blue-400/70 hover:text-blue-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-blue-400/50 transition-colors cursor-pointer break-words max-w-full mt-0.5 block"
-                          title={destination!}
+                          onClick={() => handleOpenFolder(entry.file_path)}
+                          className="text-left underline decoration-zinc-600 underline-offset-2 hover:decoration-zinc-400 transition-colors cursor-pointer text-sm break-words max-w-full"
+                          title={entry.file_path}
                         >
-                          → <span className="text-zinc-500">{destDisplay.dir}\</span>
-                          <span>{destDisplay.name}</span>
+                          <span className="text-zinc-500">{dir}\</span>
+                          <span className="font-medium text-zinc-200">{name}</span>
                         </button>
-                      )}
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        {entry.action} — {entry.rule_name ?? t("dashboard.manual")}
-                      </p>
+                        {destDisplay && (
+                          <button
+                            onClick={() => handleOpenFolder(destination!)}
+                            className="text-left text-xs text-blue-400/70 hover:text-blue-300 underline decoration-zinc-700 underline-offset-2 hover:decoration-blue-400/50 transition-colors cursor-pointer break-words max-w-full mt-0.5 block"
+                            title={destination!}
+                          >
+                            → <span className="text-zinc-500">{destDisplay.dir}\</span>
+                            <span>{destDisplay.name}</span>
+                          </button>
+                        )}
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          {entry.action} — {entry.rule_name ?? t("dashboard.manual")}
+                        </p>
+                        {entry.result !== "success" && entry.details && (
+                          <p className="text-xs text-red-400/80 mt-0.5" title={entry.details}>
+                            {entry.details}
+                          </p>
+                        )}
+                        {hasRetries && (
+                          <button
+                            onClick={toggleExpand}
+                            className="inline-flex items-center gap-1 mt-1 text-xs text-amber-400/80 hover:text-amber-300 transition-colors"
+                          >
+                            <ChevronRight
+                              size={12}
+                              className={`transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                            />
+                            {t("activity.retryCount", { count: group.retries.length })}
+                          </button>
+                        )}
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <span
+                          className={`text-xs px-2 py-1 rounded-full ${
+                            entry.result === "success"
+                              ? "bg-green-900/50 text-green-400"
+                              : "bg-red-900/50 text-red-400"
+                          }`}
+                        >
+                          {entry.result}
+                        </span>
+                        <p className="text-xs text-zinc-500 mt-1">
+                          {entry.timestamp}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full ${
-                          entry.result === "success"
-                            ? "bg-green-900/50 text-green-400"
-                            : "bg-red-900/50 text-red-400"
-                        }`}
-                      >
-                        {entry.result}
-                      </span>
-                      <p className="text-xs text-zinc-500 mt-1">
-                        {entry.timestamp}
-                      </p>
-                    </div>
+                    {hasRetries && isExpanded && (
+                      <div className="bg-zinc-800/30 border-t border-zinc-800/50">
+                        {group.retries.map((retry) => (
+                          <div key={retry.id} className="px-5 pl-10 py-2 flex items-center justify-between text-xs text-zinc-500">
+                            <div className="min-w-0 flex-1">
+                              <span>↳ {retry.details ?? retry.action}</span>
+                            </div>
+                            <span className="text-zinc-600 flex-shrink-0 ml-2">{retry.timestamp}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

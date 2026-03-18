@@ -8,6 +8,63 @@ use crate::condition;
 use crate::config::{Action, Rule, WatchedFolder};
 use crate::db::Database;
 
+/// Translate a raw `std::io::Error` into a short, user-friendly reason.
+/// Detects common OS error codes on Windows (and their Unix equivalents)
+/// so the activity log shows things like "File is in use by another process"
+/// instead of "Os { code: 32, … }".
+pub fn friendly_io_error(e: &std::io::Error) -> String {
+    if let Some(code) = e.raw_os_error() {
+        #[cfg(windows)]
+        {
+            return match code {
+                5   => "Permission denied".to_string(),
+                32  => "File is in use by another process".to_string(),
+                33  => "File is locked by another process".to_string(),
+                2   => "File not found".to_string(),
+                3   => "Path not found".to_string(),
+                112 => "Not enough disk space".to_string(),
+                183 => "File already exists at destination".to_string(),
+                206 => "File path is too long".to_string(),
+                _   => e.to_string(),
+            };
+        }
+        #[cfg(not(windows))]
+        {
+            return match code {
+                1          => "Permission denied".to_string(),
+                2          => "File not found".to_string(),
+                11 | 16    => "File is in use by another process".to_string(),
+                28         => "Not enough disk space".to_string(),
+                _          => e.to_string(),
+            };
+        }
+    }
+    e.to_string()
+}
+
+/// Translate a `trash::Error` into a short, user-friendly reason.
+pub fn friendly_trash_error(e: &trash::Error) -> String {
+    match e {
+        trash::Error::Os { code, .. } => {
+            // Build a temporary io::Error to reuse the same mapping
+            let io_err = std::io::Error::from_raw_os_error(*code);
+            friendly_io_error(&io_err)
+        }
+        trash::Error::CouldNotAccess { .. } => "Permission denied or file not found".to_string(),
+        trash::Error::Unknown { description } => {
+            let lower = description.to_lowercase();
+            if lower.contains("abort") || lower.contains("cancelled") {
+                "File is in use by another process".to_string()
+            } else if lower.contains("denied") || lower.contains("access") {
+                "Permission denied".to_string()
+            } else {
+                description.clone()
+            }
+        }
+        _ => e.to_string(),
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct RuleActionResult {
     pub file_path: String,
@@ -404,7 +461,7 @@ fn execute_move(
             action: "move".to_string(),
             rule_name: rule_name.to_string(),
             success: false,
-            details: Some(format!("Failed to create destination: {}", e)),
+            details: Some(format!("Failed to create destination: {}", friendly_io_error(&e))),
         };
     }
 
@@ -456,7 +513,7 @@ fn execute_move(
                 action: "copy".to_string(),
                 rule_name: rule_name.to_string(),
                 success: false,
-                details: Some(format!("Copy failed: {}", e)),
+                details: Some(format!("Copy failed: {}", friendly_io_error(&e))),
             },
         };
     }
@@ -496,7 +553,7 @@ fn execute_move(
                         success: false,
                         details: Some(format!(
                             "Move failed: {}, dir copy failed: {}",
-                            e, copy_err
+                            friendly_io_error(&e), friendly_io_error(&copy_err)
                         )),
                     },
                 }
@@ -523,7 +580,7 @@ fn execute_move(
                         success: false,
                         details: Some(format!(
                             "Move failed: {}, copy failed: {}",
-                            e, copy_err
+                            friendly_io_error(&e), friendly_io_error(&copy_err)
                         )),
                     },
                 }

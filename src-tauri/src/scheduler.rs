@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::config::AppConfig;
 use crate::db::Database;
-use crate::rules::is_whitelisted;
+use crate::rules::{is_whitelisted, friendly_io_error, friendly_trash_error};
 
 /// Run the periodic maintenance tasks (log pruning, undo cleanup, storage enforcement).
 /// This runs on the scan_interval_minutes schedule. It does NOT run deletions —
@@ -189,7 +189,7 @@ fn execute_scheduled_move(
     let destination = Path::new(&destination_str);
     if let Err(e) = fs::create_dir_all(destination) {
         log::error!("Failed to create destination {}: {}", destination.display(), e);
-        return Err(format!("Failed to create destination: {}", e));
+        return Err(format!("Failed to create destination: {}", friendly_io_error(&e)));
     }
 
     let file_name = file_path.file_name().unwrap_or_default();
@@ -238,7 +238,7 @@ fn execute_scheduled_move(
             }
             Err(e) => {
                 log::error!("Failed to copy {}: {}", file_path.display(), e);
-                Err(format!("Copy failed: {}", e))
+                Err(format!("Copy failed: {}", friendly_io_error(&e)))
             }
         };
     }
@@ -277,7 +277,7 @@ fn execute_scheduled_move(
                     }
                     Err(e) => {
                         log::error!("Failed to move dir {}: {}", file_path.display(), e);
-                        Err(format!("Move failed: {}", e))
+                        Err(format!("Move failed: {}", friendly_io_error(&e)))
                     }
                 }
             } else {
@@ -300,7 +300,7 @@ fn execute_scheduled_move(
                     }
                     Err(e) => {
                         log::error!("Failed to move {}: {}", file_path.display(), e);
-                        Err(format!("Move failed: {}", e))
+                        Err(format!("Move failed: {}", friendly_io_error(&e)))
                     }
                 }
             }
@@ -632,7 +632,7 @@ fn safe_delete(file_path: &Path, db: &Database, now_str: &str, undo_action: &str
         }
         Err(e) => {
             log::error!("Failed to recycle {}: {}", file_path.display(), e);
-            Err(format!("Recycle failed: {}", e))
+            Err(format!("Recycle failed: {}", friendly_trash_error(&e)))
         }
     }
 }

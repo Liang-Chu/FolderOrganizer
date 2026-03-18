@@ -201,7 +201,8 @@
     "noActivity": "Aucune activité enregistrée.",
     "previous": "Précédent",
     "next": "Suivant",
-    "page": "Page {{page}}"
+    "page": "Page {{page}}",
+    "retryCount": "{{count}} tentative(s) échouée(s) précédente(s)"
   },
   "data": {
     "title": "Explorateur de données",

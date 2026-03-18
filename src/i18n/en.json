@@ -201,6 +201,7 @@
     "headerDetails": "Details",
     "headerTime": "Time",
     "noActivity": "No activity recorded yet.",
+    "retryCount": "{{count}} previous failed attempt(s)",
     "previous": "Previous",
     "next": "Next",
     "page": "Page {{page}}"
