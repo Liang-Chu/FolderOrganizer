@@ -7,7 +7,6 @@ import {
   TestTube2,
   FolderOpen,
   Plus,
-  Pencil,
   Trash2,
   ShieldCheck,
 } from "lucide-react";
@@ -533,9 +532,13 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
                   autoFocus
                 />
               ) : (
-                <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
-                  {pattern}
-                </span>
+                <input
+                  type="text"
+                  value={pattern}
+                  readOnly
+                  onClick={() => startEditingWhitelistPattern(idx)}
+                  className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono text-zinc-100 cursor-text focus:outline-none"
+                />
               )}
               {editingWhitelistIndex === idx ? (
                 <>
@@ -554,15 +557,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
                     <X size={14} />
                   </button>
                 </>
-              ) : (
-                <button
-                  onClick={() => startEditingWhitelistPattern(idx)}
-                  className="text-zinc-500 hover:text-blue-400 transition-colors"
-                  title={t("rules.editRule")}
-                >
-                  <Pencil size={14} />
-                </button>
-              )}
+              ) : null}
               <button
                 onClick={() => {
                   const updated = [...draft.whitelist];

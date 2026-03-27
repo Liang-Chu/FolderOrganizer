@@ -9,7 +9,6 @@ import {
   ToggleRight,
   ShieldCheck,
   Plus,
-  Pencil,
   Check,
   X,
   ChevronDown,
@@ -65,6 +64,8 @@ export default function Folders() {
 
   // Whitelist input per folder
   const [whitelistInputs, setWhitelistInputs] = useState<Record<string, string>>({});
+  const [folderWhitelistDrafts, setFolderWhitelistDrafts] = useState<Record<string, string[]>>({});
+  const [folderWhitelistDirty, setFolderWhitelistDirty] = useState<Record<string, boolean>>({});
   const [editingWhitelistIndexByFolder, setEditingWhitelistIndexByFolder] = useState<Record<string, number | null>>({});
   const [editingWhitelistValueByFolder, setEditingWhitelistValueByFolder] = useState<Record<string, string>>({});
 
@@ -86,6 +87,14 @@ export default function Folders() {
         }
         return next;
       });
+      setFolderWhitelistDrafts(() => {
+        const next: Record<string, string[]> = {};
+        for (const folder of f) {
+          next[folder.id] = [...folder.whitelist];
+        }
+        return next;
+      });
+      setFolderWhitelistDirty({});
       // Load stats for all folders
       const statsMap: Record<string, Record<string, RuleExecutionStats>> = {};
       await Promise.all(
@@ -508,25 +517,67 @@ export default function Folders() {
     api.scanFolder(folderId).catch(() => {});
   };
 
+  const updateWhitelistDraft = (
+    folderId: string,
+    updater: (prev: string[]) => string[]
+  ) => {
+    setFolderWhitelistDrafts((prev) => {
+      const current = prev[folderId] ?? [];
+      return {
+        ...prev,
+        [folderId]: updater(current),
+      };
+    });
+    setFolderWhitelistDirty((prev) => ({ ...prev, [folderId]: true }));
+  };
+
+  const saveWhitelistDraft = async (folderId: string) => {
+    const baseDraft = folderWhitelistDrafts[folderId] ?? [];
+    let finalDraft = [...baseDraft];
+
+    const editingIdx = editingWhitelistIndexByFolder[folderId];
+    if (editingIdx !== null && editingIdx !== undefined) {
+      const edited = (editingWhitelistValueByFolder[folderId] || "").trim();
+      if (edited) {
+        finalDraft[editingIdx] = edited;
+      } else {
+        finalDraft.splice(editingIdx, 1);
+      }
+    }
+
+    const pendingInput = (whitelistInputs[folderId] || "").trim();
+    if (pendingInput) {
+      finalDraft.push(pendingInput);
+    }
+
+    await handleSaveWhitelist(folderId, finalDraft);
+
+    if (pendingInput) {
+      setWhitelistInputs((prev) => ({ ...prev, [folderId]: "" }));
+    }
+    if (editingIdx !== null && editingIdx !== undefined) {
+      cancelEditingWhitelistPattern(folderId);
+    }
+    setFolderWhitelistDirty((prev) => ({ ...prev, [folderId]: false }));
+  };
+
   const addWhitelistPattern = async (folderId: string) => {
     const pattern = (whitelistInputs[folderId] || "").trim();
     if (!pattern) return;
-    const folder = folders.find((f) => f.id === folderId);
-    if (!folder) return;
-    await handleSaveWhitelist(folderId, [...folder.whitelist, pattern]);
+    updateWhitelistDraft(folderId, (prev) => [...prev, pattern]);
     setWhitelistInputs((prev) => ({ ...prev, [folderId]: "" }));
   };
 
-  const removeWhitelistPattern = async (folderId: string, idx: number) => {
-    const folder = folders.find((f) => f.id === folderId);
-    if (!folder) return;
-    const updated = [...folder.whitelist];
-    updated.splice(idx, 1);
+  const removeWhitelistPattern = (folderId: string, idx: number) => {
     setEditingWhitelistIndexByFolder((prev) => ({
       ...prev,
       [folderId]: prev[folderId] === idx ? null : prev[folderId] !== null && (prev[folderId] as number) > idx ? (prev[folderId] as number) - 1 : prev[folderId] ?? null,
     }));
-    await handleSaveWhitelist(folderId, updated);
+    updateWhitelistDraft(folderId, (prev) => {
+      const updated = [...prev];
+      updated.splice(idx, 1);
+      return updated;
+    });
   };
 
   const startEditingWhitelistPattern = (folderId: string, idx: number, pattern: string) => {
@@ -542,16 +593,16 @@ export default function Folders() {
   const applyEditingWhitelistPattern = async (folderId: string) => {
     const idx = editingWhitelistIndexByFolder[folderId];
     if (idx === null || idx === undefined) return;
-    const folder = folders.find((f) => f.id === folderId);
-    if (!folder) return;
     const edited = (editingWhitelistValueByFolder[folderId] || "").trim();
-    const updated = [...folder.whitelist];
-    if (edited) {
-      updated[idx] = edited;
-    } else {
-      updated.splice(idx, 1);
-    }
-    await handleSaveWhitelist(folderId, updated);
+    updateWhitelistDraft(folderId, (prev) => {
+      const updated = [...prev];
+      if (edited) {
+        updated[idx] = edited;
+      } else {
+        updated.splice(idx, 1);
+      }
+      return updated;
+    });
     cancelEditingWhitelistPattern(folderId);
   };
 
@@ -582,10 +633,14 @@ export default function Folders() {
         <div className="space-y-3">
           {folders.map((folder) => {
             const rulesExpanded = expandedSections[folder.id] === "rules";
-            const whitelistExpanded = expandedSections[folder.id] === "whitelist";
             const whitelistInput = whitelistInputs[folder.id] || "";
+            const whitelistDraft = folderWhitelistDrafts[folder.id] ?? folder.whitelist;
+            const whitelistDirty = folderWhitelistDirty[folder.id] ?? false;
             const editingWhitelistIndex = editingWhitelistIndexByFolder[folder.id] ?? null;
             const editingWhitelistValue = editingWhitelistValueByFolder[folder.id] || "";
+            const hasPendingWhitelistInput = whitelistInput.trim().length > 0;
+            const hasPendingWhitelistEdit = editingWhitelistIndex !== null;
+            const canSaveWhitelist = whitelistDirty || hasPendingWhitelistInput || hasPendingWhitelistEdit;
 
             return (
               <div
@@ -649,21 +704,13 @@ export default function Folders() {
                     )}
                   </button>
                   <button
-                    onClick={() => toggleSection(folder.id, "whitelist")}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex-shrink-0 border ${
-                      whitelistExpanded
-                        ? "bg-emerald-600/15 text-emerald-400 border-emerald-500/40"
-                        : "text-emerald-300 border-emerald-500/30 bg-emerald-500/5 hover:text-emerald-200 hover:border-emerald-400/50 hover:bg-emerald-500/10"
-                    }`}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex-shrink-0 border text-emerald-300 border-emerald-500/30 bg-emerald-500/5"
+                    disabled
                   >
                     <ShieldCheck size={15} />
-                    {folder.whitelist.length > 0
-                      ? t("folders.whitelistCount", { count: folder.whitelist.length })
+                    {whitelistDraft.length > 0
+                      ? t("folders.whitelistCount", { count: whitelistDraft.length })
                       : t("folders.whitelist")}
-                    {whitelistExpanded
-                      ? <ChevronUp size={14} className="ml-0.5" />
-                      : <ChevronDown size={14} className="ml-0.5" />
-                    }
                   </button>
 
                   <div className="w-px h-6 bg-zinc-700 flex-shrink-0" />
@@ -805,106 +852,110 @@ export default function Folders() {
                         ))}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Whitelist section */}
-                {whitelistExpanded && (
-                  <div className="px-5 pb-4 pt-3">
-                    <p className="text-sm text-zinc-400 mb-3">{t("folders.whitelistDesc")}</p>
+                    {/* Whitelist section (inline under rules) */}
+                    <div className="mt-4 pt-4 border-t border-zinc-800">
+                      <p className="text-sm text-zinc-400 mb-2">{t("folders.whitelistDesc")}</p>
 
-                    {folder.whitelist.length > 0 && (
-                      <div className="space-y-1.5 mb-3">
-                        {folder.whitelist.map((pattern, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            {editingWhitelistIndex === idx ? (
-                              <input
-                                type="text"
-                                value={editingWhitelistValue}
-                                onChange={(e) =>
-                                  setEditingWhitelistValueByFolder((prev) => ({
-                                    ...prev,
-                                    [folder.id]: e.target.value,
-                                  }))
-                                }
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    applyEditingWhitelistPattern(folder.id);
-                                  } else if (e.key === "Escape") {
-                                    e.preventDefault();
-                                    cancelEditingWhitelistPattern(folder.id);
+                      {whitelistDraft.length > 0 && (
+                        <div className="space-y-1.5 mb-3">
+                          {whitelistDraft.map((pattern, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              {editingWhitelistIndex === idx ? (
+                                <input
+                                  type="text"
+                                  value={editingWhitelistValue}
+                                  onChange={(e) =>
+                                    setEditingWhitelistValueByFolder((prev) => ({
+                                      ...prev,
+                                      [folder.id]: e.target.value,
+                                    }))
                                   }
-                                }}
-                                className="flex-1 px-3 py-1.5 bg-zinc-800 border border-blue-500 rounded-lg text-sm font-mono focus:outline-none"
-                                autoFocus
-                              />
-                            ) : (
-                              <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
-                                {pattern}
-                              </span>
-                            )}
-                            {editingWhitelistIndex === idx ? (
-                              <>
-                                <button
-                                  onClick={() => applyEditingWhitelistPattern(folder.id)}
-                                  className="text-zinc-500 hover:text-green-400 transition-colors"
-                                  title={t("rules.save")}
-                                >
-                                  <Check size={14} />
-                                </button>
-                                <button
-                                  onClick={() => cancelEditingWhitelistPattern(folder.id)}
-                                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                                  title={t("rules.cancel")}
-                                >
-                                  <X size={14} />
-                                </button>
-                              </>
-                            ) : (
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      e.preventDefault();
+                                      applyEditingWhitelistPattern(folder.id);
+                                    } else if (e.key === "Escape") {
+                                      e.preventDefault();
+                                      cancelEditingWhitelistPattern(folder.id);
+                                    }
+                                  }}
+                                  className="flex-1 px-3 py-1.5 bg-zinc-800 border border-blue-500 rounded-lg text-sm font-mono focus:outline-none"
+                                  autoFocus
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={pattern}
+                                  readOnly
+                                  onClick={() => startEditingWhitelistPattern(folder.id, idx, pattern)}
+                                  className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono text-zinc-100 cursor-text focus:outline-none"
+                                />
+                              )}
+                              {editingWhitelistIndex === idx ? (
+                                <>
+                                  <button
+                                    onClick={() => applyEditingWhitelistPattern(folder.id)}
+                                    className="text-zinc-500 hover:text-green-400 transition-colors"
+                                    title={t("rules.save")}
+                                  >
+                                    <Check size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => cancelEditingWhitelistPattern(folder.id)}
+                                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                    title={t("rules.cancel")}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </>
+                              ) : null}
                               <button
-                                onClick={() => startEditingWhitelistPattern(folder.id, idx, pattern)}
-                                className="text-zinc-500 hover:text-blue-400 transition-colors"
-                                title={t("rules.editRule")}
+                                onClick={() => removeWhitelistPattern(folder.id, idx)}
+                                className="text-zinc-500 hover:text-red-400 transition-colors"
                               >
-                                <Pencil size={14} />
+                                <Trash2 size={14} />
                               </button>
-                            )}
-                            <button
-                              onClick={() => removeWhitelistPattern(folder.id, idx)}
-                              className="text-zinc-500 hover:text-red-400 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={whitelistInput}
-                        onChange={(e) =>
-                          setWhitelistInputs((prev) => ({
-                            ...prev,
-                            [folder.id]: e.target.value,
-                          }))
-                        }
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") addWhitelistPattern(folder.id);
-                        }}
-                        placeholder={t("folders.whitelistPlaceholder")}
-                        className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
-                      />
-                      <button
-                        onClick={() => addWhitelistPattern(folder.id)}
-                        disabled={!whitelistInput.trim()}
-                        className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 border border-zinc-700 rounded-lg text-sm transition-colors"
-                      >
-                        <Plus size={14} />
-                        {t("folders.whitelistAdd")}
-                      </button>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={whitelistInput}
+                          onChange={(e) =>
+                            setWhitelistInputs((prev) => ({
+                              ...prev,
+                              [folder.id]: e.target.value,
+                            }))
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") addWhitelistPattern(folder.id);
+                          }}
+                          placeholder={t("folders.whitelistPlaceholder")}
+                          className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
+                        />
+                        <button
+                          onClick={() => addWhitelistPattern(folder.id)}
+                          disabled={!whitelistInput.trim()}
+                          className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 border border-zinc-700 rounded-lg text-sm transition-colors"
+                        >
+                          <Plus size={14} />
+                          {t("folders.whitelistAdd")}
+                        </button>
+                      </div>
+
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={() => saveWhitelistDraft(folder.id)}
+                          disabled={!canSaveWhitelist}
+                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          {t("rules.save")}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
