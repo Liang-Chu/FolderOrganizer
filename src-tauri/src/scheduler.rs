@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::config::AppConfig;
 use crate::db::Database;
-use crate::rules::{is_whitelisted, friendly_io_error, friendly_trash_error};
+use crate::rules::{is_whitelisted_with_relative_path, friendly_io_error, friendly_trash_error};
 
 /// Run the periodic maintenance tasks (log pruning, undo cleanup, storage enforcement).
 /// This runs on the scan_interval_minutes schedule. It does NOT run deletions —
@@ -76,15 +76,28 @@ pub fn process_due_deletions_with_config(
                     let folder = cfg.folders.iter().find(|f| f.id == entry.folder_id);
                     let should_run = match folder {
                         Some(f) if f.enabled => {
+                            let relative_path = Path::new(&entry.file_path)
+                                .strip_prefix(&f.path)
+                                .ok()
+                                .map(|p| p.to_string_lossy().replace('\\', "/"));
+
                             // Check folder-level whitelist
-                            if is_whitelisted(&entry.file_name, &f.whitelist) {
+                            if is_whitelisted_with_relative_path(
+                                &entry.file_name,
+                                relative_path.as_deref(),
+                                &f.whitelist,
+                            ) {
                                 false
                             } else {
                                 f.rules.iter().any(|r| {
                                     r.is_enabled()
                                         && r.name == entry.rule_name
                                         // Check rule-level whitelist
-                                        && !is_whitelisted(&entry.file_name, &r.whitelist)
+                                        && !is_whitelisted_with_relative_path(
+                                            &entry.file_name,
+                                            relative_path.as_deref(),
+                                            &r.whitelist,
+                                        )
                                         && match (&r.action, entry.action_type.as_str()) {
                                             (crate::config::Action::Delete { .. }, "delete") => true,
                                             (crate::config::Action::Move { .. }, "move") => true,

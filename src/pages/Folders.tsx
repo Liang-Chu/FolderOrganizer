@@ -9,6 +9,9 @@ import {
   ToggleRight,
   ShieldCheck,
   Plus,
+  Pencil,
+  Check,
+  X,
   ChevronDown,
   ChevronUp,
   ListChecks,
@@ -62,6 +65,8 @@ export default function Folders() {
 
   // Whitelist input per folder
   const [whitelistInputs, setWhitelistInputs] = useState<Record<string, string>>({});
+  const [editingWhitelistIndexByFolder, setEditingWhitelistIndexByFolder] = useState<Record<string, number | null>>({});
+  const [editingWhitelistValueByFolder, setEditingWhitelistValueByFolder] = useState<Record<string, string>>({});
 
   // Rule execution stats per folder (keyed by folder id -> rule name -> stats)
   const [ruleStats, setRuleStats] = useState<Record<string, Record<string, RuleExecutionStats>>>({});
@@ -517,7 +522,37 @@ export default function Folders() {
     if (!folder) return;
     const updated = [...folder.whitelist];
     updated.splice(idx, 1);
+    setEditingWhitelistIndexByFolder((prev) => ({
+      ...prev,
+      [folderId]: prev[folderId] === idx ? null : prev[folderId] !== null && (prev[folderId] as number) > idx ? (prev[folderId] as number) - 1 : prev[folderId] ?? null,
+    }));
     await handleSaveWhitelist(folderId, updated);
+  };
+
+  const startEditingWhitelistPattern = (folderId: string, idx: number, pattern: string) => {
+    setEditingWhitelistIndexByFolder((prev) => ({ ...prev, [folderId]: idx }));
+    setEditingWhitelistValueByFolder((prev) => ({ ...prev, [folderId]: pattern }));
+  };
+
+  const cancelEditingWhitelistPattern = (folderId: string) => {
+    setEditingWhitelistIndexByFolder((prev) => ({ ...prev, [folderId]: null }));
+    setEditingWhitelistValueByFolder((prev) => ({ ...prev, [folderId]: "" }));
+  };
+
+  const applyEditingWhitelistPattern = async (folderId: string) => {
+    const idx = editingWhitelistIndexByFolder[folderId];
+    if (idx === null || idx === undefined) return;
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder) return;
+    const edited = (editingWhitelistValueByFolder[folderId] || "").trim();
+    const updated = [...folder.whitelist];
+    if (edited) {
+      updated[idx] = edited;
+    } else {
+      updated.splice(idx, 1);
+    }
+    await handleSaveWhitelist(folderId, updated);
+    cancelEditingWhitelistPattern(folderId);
   };
 
   const otherFoldersHaveRules = (folderId: string) =>
@@ -549,6 +584,8 @@ export default function Folders() {
             const rulesExpanded = expandedSections[folder.id] === "rules";
             const whitelistExpanded = expandedSections[folder.id] === "whitelist";
             const whitelistInput = whitelistInputs[folder.id] || "";
+            const editingWhitelistIndex = editingWhitelistIndexByFolder[folder.id] ?? null;
+            const editingWhitelistValue = editingWhitelistValueByFolder[folder.id] || "";
 
             return (
               <div
@@ -780,9 +817,59 @@ export default function Folders() {
                       <div className="space-y-1.5 mb-3">
                         {folder.whitelist.map((pattern, idx) => (
                           <div key={idx} className="flex items-center gap-2">
-                            <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
-                              {pattern}
-                            </span>
+                            {editingWhitelistIndex === idx ? (
+                              <input
+                                type="text"
+                                value={editingWhitelistValue}
+                                onChange={(e) =>
+                                  setEditingWhitelistValueByFolder((prev) => ({
+                                    ...prev,
+                                    [folder.id]: e.target.value,
+                                  }))
+                                }
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    applyEditingWhitelistPattern(folder.id);
+                                  } else if (e.key === "Escape") {
+                                    e.preventDefault();
+                                    cancelEditingWhitelistPattern(folder.id);
+                                  }
+                                }}
+                                className="flex-1 px-3 py-1.5 bg-zinc-800 border border-blue-500 rounded-lg text-sm font-mono focus:outline-none"
+                                autoFocus
+                              />
+                            ) : (
+                              <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
+                                {pattern}
+                              </span>
+                            )}
+                            {editingWhitelistIndex === idx ? (
+                              <>
+                                <button
+                                  onClick={() => applyEditingWhitelistPattern(folder.id)}
+                                  className="text-zinc-500 hover:text-green-400 transition-colors"
+                                  title={t("rules.save")}
+                                >
+                                  <Check size={14} />
+                                </button>
+                                <button
+                                  onClick={() => cancelEditingWhitelistPattern(folder.id)}
+                                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                                  title={t("rules.cancel")}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => startEditingWhitelistPattern(folder.id, idx, pattern)}
+                                className="text-zinc-500 hover:text-blue-400 transition-colors"
+                                title={t("rules.editRule")}
+                              >
+                                <Pencil size={14} />
+                              </button>
+                            )}
                             <button
                               onClick={() => removeWhitelistPattern(folder.id, idx)}
                               className="text-zinc-500 hover:text-red-400 transition-colors"

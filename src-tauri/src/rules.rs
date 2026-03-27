@@ -92,12 +92,39 @@ pub enum EvalOutcome {
     NoMatch,
 }
 
-/// Check if a filename matches any glob pattern in a whitelist.
-pub fn is_whitelisted(file_name: &str, whitelist: &[String]) -> bool {
+/// Check whether a file should be skipped by whitelist patterns.
+///
+/// Matching is done against:
+/// - the bare filename (legacy behavior)
+/// - the normalized relative path, when provided
+/// - the relative path prefixed with `/` so patterns like `*/working*`
+///   also match top-level paths like `working/file.txt`
+pub fn is_whitelisted_with_relative_path(
+    file_name: &str,
+    relative_path: Option<&str>,
+    whitelist: &[String],
+) -> bool {
     let name_lower = file_name.to_lowercase();
+    let relative_lower = relative_path
+        .map(|p| p.replace('\\', "/"))
+        .map(|p| p.trim_start_matches("./").trim_start_matches('/').to_lowercase());
+
     for pattern in whitelist {
-        if glob_match(&pattern.to_lowercase(), &name_lower) {
+        let pattern_lower = pattern.to_lowercase();
+
+        if glob_match(&pattern_lower, &name_lower) {
             return true;
+        }
+
+        if let Some(rel) = relative_lower.as_deref() {
+            if glob_match(&pattern_lower, rel) {
+                return true;
+            }
+
+            let rel_with_root = format!("/{}", rel);
+            if glob_match(&pattern_lower, &rel_with_root) {
+                return true;
+            }
         }
     }
     false
@@ -176,8 +203,14 @@ pub fn evaluate_file_full(
         .to_string_lossy()
         .to_string();
 
+    let relative_path = file_path
+        .strip_prefix(&folder.path)
+        .unwrap_or(file_path)
+        .to_string_lossy()
+        .replace('\\', "/");
+
     // Check folder-level whitelist first
-    if is_whitelisted(&file_name, &folder.whitelist) {
+    if is_whitelisted_with_relative_path(&file_name, Some(&relative_path), &folder.whitelist) {
         return EvalOutcome::NoMatch;
     }
 
@@ -205,7 +238,7 @@ pub fn evaluate_file_full(
         }
 
         // Check rule-level whitelist
-        if is_whitelisted(&file_name, &rule.whitelist) {
+        if is_whitelisted_with_relative_path(&file_name, Some(&relative_path), &rule.whitelist) {
             continue;
         }
 
@@ -217,11 +250,6 @@ pub fn evaluate_file_full(
         }
 
         let matched = if rule.match_subdirectories {
-            let relative_path = file_path
-                .strip_prefix(&folder.path)
-                .unwrap_or(file_path)
-                .to_string_lossy()
-                .replace('\\', "/");
             condition::evaluate(&rule.condition, &relative_path)
         } else {
             condition::evaluate(&rule.condition, &file_name)
@@ -603,4 +631,35 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path) -> std::io::Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whitelist_matches_relative_path() {
+        let whitelist = vec!["*/working*".to_string()];
+        assert!(is_whitelisted_with_relative_path(
+            "file.txt",
+            Some("projects/working_docs/file.txt"),
+            &whitelist,
+        ));
+    }
+
+    #[test]
+    fn whitelist_matches_top_level_relative_path() {
+        let whitelist = vec!["*/working*".to_string()];
+        assert!(is_whitelisted_with_relative_path(
+            "file.txt",
+            Some("working_notes/file.txt"),
+            &whitelist,
+        ));
+    }
+
+    #[test]
+    fn whitelist_filename_behavior_still_works() {
+        let whitelist = vec!["*.tmp".to_string()];
+        assert!(is_whitelisted_with_relative_path("cache.tmp", None, &whitelist));
+    }
 }

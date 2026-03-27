@@ -7,6 +7,7 @@ import {
   TestTube2,
   FolderOpen,
   Plus,
+  Pencil,
   Trash2,
   ShieldCheck,
 } from "lucide-react";
@@ -39,6 +40,8 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
   const [testFileName, setTestFileName] = useState("");
   const [testResult, setTestResult] = useState<boolean | null>(null);
   const [actionType, setActionType] = useState<ActionType>(rule.action.type);
+  const [editingWhitelistIndex, setEditingWhitelistIndex] = useState<number | null>(null);
+  const [editingWhitelistValue, setEditingWhitelistValue] = useState("");
 
   // Debounced condition validation
   useEffect(() => {
@@ -88,11 +91,71 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
 
   const [destError, setDestError] = useState<string | null>(null);
 
+  const buildDraftWithPendingWhitelist = useCallback((): Rule => {
+    let nextDraft = draft;
+
+    if (editingWhitelistIndex !== null) {
+      const edited = editingWhitelistValue.trim();
+      const updated = [...nextDraft.whitelist];
+      if (edited) {
+        updated[editingWhitelistIndex] = edited;
+      } else {
+        updated.splice(editingWhitelistIndex, 1);
+      }
+      nextDraft = { ...nextDraft, whitelist: updated };
+    }
+
+    const pending = whitelistInput.trim();
+    if (!pending) return nextDraft;
+    if (nextDraft.whitelist.includes(pending)) return nextDraft;
+    return { ...nextDraft, whitelist: [...nextDraft.whitelist, pending] };
+  }, [draft, whitelistInput, editingWhitelistIndex, editingWhitelistValue]);
+
+  const addWhitelistInputToDraft = useCallback(() => {
+    const nextDraft = buildDraftWithPendingWhitelist();
+    setDraft(nextDraft);
+    setWhitelistInput("");
+  }, [buildDraftWithPendingWhitelist]);
+
+  const startEditingWhitelistPattern = (idx: number) => {
+    setEditingWhitelistIndex(idx);
+    setEditingWhitelistValue(draft.whitelist[idx] ?? "");
+  };
+
+  const cancelEditingWhitelistPattern = () => {
+    setEditingWhitelistIndex(null);
+    setEditingWhitelistValue("");
+  };
+
+  const applyEditingWhitelistPattern = () => {
+    if (editingWhitelistIndex === null) return;
+    const edited = editingWhitelistValue.trim();
+    const updated = [...draft.whitelist];
+    if (edited) {
+      updated[editingWhitelistIndex] = edited;
+    } else {
+      updated.splice(editingWhitelistIndex, 1);
+    }
+    setDraft({ ...draft, whitelist: updated });
+    cancelEditingWhitelistPattern();
+  };
+
   const handleSave = async () => {
+    const nextDraft = buildDraftWithPendingWhitelist();
+    if (nextDraft !== draft) {
+      setDraft(nextDraft);
+    }
+    if (whitelistInput.trim()) {
+      setWhitelistInput("");
+    }
+    if (editingWhitelistIndex !== null) {
+      cancelEditingWhitelistPattern();
+    }
+
     // Validate destination folder for Move actions
-    if (draft.action.type === "Move" && draft.action.destination) {
+    if (nextDraft.action.type === "Move" && nextDraft.action.destination) {
       try {
-        await api.ensureDir(draft.action.destination.replace(/[\\/]+$/, ""));
+        await api.ensureDir(nextDraft.action.destination.replace(/[\\/]+$/, ""));
         setDestError(null);
       } catch (err: any) {
         setDestError(String(err));
@@ -102,7 +165,7 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
     try {
       const condition = await api.parseConditionText(conditionText);
       onSave({
-        ...draft,
+        ...nextDraft,
         condition,
         condition_text: conditionText,
       });
@@ -452,14 +515,64 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
         <div className="space-y-1.5">
           {draft.whitelist.map((pattern, idx) => (
             <div key={idx} className="flex items-center gap-2">
-              <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
-                {pattern}
-              </span>
+              {editingWhitelistIndex === idx ? (
+                <input
+                  type="text"
+                  value={editingWhitelistValue}
+                  onChange={(e) => setEditingWhitelistValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      applyEditingWhitelistPattern();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      cancelEditingWhitelistPattern();
+                    }
+                  }}
+                  className="flex-1 px-3 py-1.5 bg-zinc-800 border border-blue-500 rounded-lg text-sm font-mono focus:outline-none"
+                  autoFocus
+                />
+              ) : (
+                <span className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono">
+                  {pattern}
+                </span>
+              )}
+              {editingWhitelistIndex === idx ? (
+                <>
+                  <button
+                    onClick={applyEditingWhitelistPattern}
+                    className="text-zinc-500 hover:text-green-400 transition-colors"
+                    title={t("rules.save")}
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={cancelEditingWhitelistPattern}
+                    className="text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title={t("rules.cancel")}
+                  >
+                    <X size={14} />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => startEditingWhitelistPattern(idx)}
+                  className="text-zinc-500 hover:text-blue-400 transition-colors"
+                  title={t("rules.editRule")}
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
               <button
                 onClick={() => {
                   const updated = [...draft.whitelist];
                   updated.splice(idx, 1);
                   setDraft({ ...draft, whitelist: updated });
+                  if (editingWhitelistIndex === idx) {
+                    cancelEditingWhitelistPattern();
+                  } else if (editingWhitelistIndex !== null && editingWhitelistIndex > idx) {
+                    setEditingWhitelistIndex(editingWhitelistIndex - 1);
+                  }
                 }}
                 className="text-zinc-500 hover:text-red-400 transition-colors"
               >
@@ -475,20 +588,15 @@ export function RuleEditor({ rule, isNew, defaultSortRoot, onSave, onCancel }: R
             onChange={(e) => setWhitelistInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && whitelistInput.trim()) {
-                setDraft({ ...draft, whitelist: [...draft.whitelist, whitelistInput.trim()] });
-                setWhitelistInput("");
+                e.preventDefault();
+                addWhitelistInputToDraft();
               }
             }}
             placeholder={t("rules.whitelistPlaceholder")}
             className="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded-lg text-sm font-mono focus:outline-none focus:border-blue-500"
           />
           <button
-            onClick={() => {
-              if (whitelistInput.trim()) {
-                setDraft({ ...draft, whitelist: [...draft.whitelist, whitelistInput.trim()] });
-                setWhitelistInput("");
-              }
-            }}
+            onClick={addWhitelistInputToDraft}
             disabled={!whitelistInput.trim()}
             className="flex items-center gap-1 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 border border-zinc-700 rounded-lg text-sm transition-colors"
           >
