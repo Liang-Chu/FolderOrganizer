@@ -34,3 +34,6 @@ tauri-plugin-updater = "2.10.0"
 trash = "5.2.5"
 tauri-plugin-single-instance = "2.4.0"
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.55"
+

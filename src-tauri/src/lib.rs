@@ -1,6 +1,8 @@
 mod commands;
 mod condition;
 mod config;
+#[cfg(windows)]
+mod context_menu;
 mod db;
 mod rules;
 mod scheduler;
@@ -223,6 +225,24 @@ pub fn run() {
                     let _ = autostart.enable();
                 } else {
                     let _ = autostart.disable();
+                }
+            }
+
+            // ── Sync Explorer context menu with config on launch ──
+            // Self-heals regardless of installer (MSI installs never had the
+            // NSIS hook, and updates must not override the user's choice).
+            #[cfg(windows)]
+            {
+                let (enabled, prompted) = cli_config
+                    .lock()
+                    .map(|c| (c.settings.context_menu_enabled, c.settings.context_menu_prompted))
+                    .unwrap_or((true, false));
+                // Leave the registry alone until the user has answered the
+                // first-run prompt — their choice is applied via save_config_cmd.
+                if prompted {
+                    if let Err(e) = context_menu::sync(enabled) {
+                        log::warn!("Failed to sync context menu registration: {}", e);
+                    }
                 }
             }
 

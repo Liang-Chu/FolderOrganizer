@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { listen } from "@tauri-apps/api/event";
 import Sidebar from "./Sidebar";
+import { ContextMenuPrompt } from "./ContextMenuPrompt";
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export default function Layout() {
       <main className="flex-1 overflow-auto p-6 min-w-0">
         <Outlet />
       </main>
+      <ContextMenuPrompt />
     </div>
   );
 }

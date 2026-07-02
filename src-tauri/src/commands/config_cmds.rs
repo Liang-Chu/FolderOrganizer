@@ -27,6 +27,17 @@ pub fn save_config_cmd(
         let _ = autostart.disable();
     }
 
+    // Sync Explorer context menu once the user has made a choice
+    // (via the first-run prompt or the Settings toggle)
+    #[cfg(windows)]
+    {
+        if new_config.settings.context_menu_prompted {
+            if let Err(e) = crate::context_menu::sync(new_config.settings.context_menu_enabled) {
+                log::warn!("Failed to sync context menu registration: {}", e);
+            }
+        }
+    }
+
     config::save_config(&new_config)?;
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     *config = new_config;

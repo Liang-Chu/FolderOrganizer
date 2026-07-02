@@ -180,6 +180,31 @@ export default function SettingsPage() {
         </div>
 
 
+        {/* Explorer context menu */}
+        <div className="px-5 py-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">{t("settings.contextMenu")}</p>
+            <p className="text-xs text-zinc-500">
+              {t("settings.contextMenuDesc")}
+            </p>
+          </div>
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings.context_menu_enabled}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  context_menu_enabled: e.target.checked,
+                  context_menu_prompted: true,
+                })
+              }
+              className="sr-only peer"
+            />
+            <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:bg-blue-600 after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
+          </label>
+        </div>
+
         {/* Default sort root */}
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-2">

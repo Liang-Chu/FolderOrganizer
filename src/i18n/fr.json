@@ -236,6 +236,8 @@
     "startWithOsDesc": "Lancer automatiquement à la connexion",
     "minimizeToTray": "Réduire dans la barre",
     "minimizeToTrayDesc": "Continuer en arrière-plan dans la barre des tâches",
+    "contextMenu": "Menu contextuel Windows",
+    "contextMenuDesc": "Afficher « Watch with Folder Organizer » lors d'un clic droit sur un dossier dans l'Explorateur (sous Windows 11, via « Afficher plus d'options »)",
     "defaultSortRoot": "Dossier racine de tri",
     "defaultSortRootDesc": "Dossier racine pour les destinations de déplacement",
     "selectSortRoot": "Sélectionner le dossier racine de tri",
@@ -276,6 +278,13 @@
     "langEn": "English",
     "langZh": "中文",
     "langFr": "Français"
+  },
+  "contextMenuPrompt": {
+    "title": "Ajouter au menu contextuel ?",
+    "body": "Ajoute « Watch with Folder Organizer » au menu contextuel des dossiers de l'Explorateur Windows, pour surveiller un dossier en un clic. Sous Windows 11, l'entrée apparaît sous « Afficher plus d'options ».",
+    "hint": "Modifiable à tout moment dans les Paramètres.",
+    "enable": "Activer",
+    "notNow": "Plus tard"
   },
   "common": {
     "success": "succès",

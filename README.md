@@ -11,6 +11,7 @@ A lightweight desktop application that monitors user-configured folders and auto
 
 - **Auto-move/delete** files based on rules that can be set up in seconds!
 ![alt text](image-1.png)
+- **Right-click any folder** in Explorer → *Watch with Folder Organizer* to start watching it in one click. You're asked once on first startup, and can toggle it anytime in Settings. (On Windows 11 the entry lives under *Show more options*.)
 - **Match testing** Not sure if a file/folder name matches the condition? Easy way to confirm it!
 ![alt text](image.png)
 
@@ -65,6 +66,7 @@ src/                  # React frontend
 src-tauri/src/        # Rust backend
   config.rs           # App config types, load/save JSON
   condition.rs        # Condition parser, evaluator, tests
+  context_menu.rs     # Explorer right-click menu registration (HKCU)
   rules.rs            # Rule engine: evaluate + execute
   watcher.rs          # File system watcher (notify)
   scheduler.rs        # Periodic cleanup, deletion processing

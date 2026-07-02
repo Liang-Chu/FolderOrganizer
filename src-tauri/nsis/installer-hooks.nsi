@@ -1,17 +1,10 @@
 ; Folder Organizer — NSIS installer hooks
-; Adds right-click "Watch with Folder Organizer" context menu for folders
-; Launches the app after installation
 
 !macro CUSTOM_INSTALL
-  ; Register right-click context menu for folders
-  WriteRegStr HKCU "Software\Classes\Directory\shell\FolderOrganizer" "" "Watch with Folder Organizer"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\FolderOrganizer" "Icon" "$INSTDIR\Folder Organizer.exe,0"
-  WriteRegStr HKCU "Software\Classes\Directory\shell\FolderOrganizer\command" "" '"$INSTDIR\Folder Organizer.exe" --watch-folder "%V"'
-
-  ; Also add to directory background (right-click in empty space inside a folder)
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\FolderOrganizer" "" "Watch with Folder Organizer"
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\FolderOrganizer" "Icon" "$INSTDIR\Folder Organizer.exe,0"
-  WriteRegStr HKCU "Software\Classes\Directory\Background\shell\FolderOrganizer\command" "" '"$INSTDIR\Folder Organizer.exe" --watch-folder "%V"'
+  ; Context-menu registration is managed by the app itself
+  ; (src-tauri/src/context_menu.rs): the user is asked on first startup and
+  ; can toggle it in Settings. Registering here would re-enable it on every
+  ; update and would not cover MSI installs.
 !macroend
 
 !macro CUSTOM_UNINSTALL

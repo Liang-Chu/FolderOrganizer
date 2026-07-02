@@ -237,6 +237,8 @@
     "startWithOsDesc": "登录时自动启动应用",
     "minimizeToTray": "最小化到托盘",
     "minimizeToTrayDesc": "关闭窗口时在系统托盘中继续运行",
+    "contextMenu": "Windows 右键菜单",
+    "contextMenuDesc": "右键点击资源管理器中的文件夹时显示“Watch with Folder Organizer”（Windows 11 中位于“显示更多选项”内）",
 
     "defaultSortRoot": "默认整理根目录",
     "defaultSortRootDesc": "移动操作的根目录 — 子文件夹名称在此路径下解析",
@@ -278,6 +280,13 @@
     "langEn": "English",
     "langZh": "中文",
     "langFr": "Français"
+  },
+  "contextMenuPrompt": {
+    "title": "添加到右键菜单？",
+    "body": "将“Watch with Folder Organizer”添加到资源管理器文件夹的右键菜单，一键开始监视任意文件夹。在 Windows 11 中，该选项位于“显示更多选项”内。",
+    "hint": "之后可随时在设置中更改。",
+    "enable": "启用",
+    "notNow": "暂不"
   },
   "common": {
     "success": "成功",

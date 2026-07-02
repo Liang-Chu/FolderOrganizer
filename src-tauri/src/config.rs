@@ -46,6 +46,17 @@ pub struct AppSettings {
     /// Dashboard grouping preference: "none", "date", "rule", "folder"
     #[serde(default = "default_dashboard_group_by")]
     pub dashboard_group_by: String,
+    /// Show "Watch with Folder Organizer" in the Explorer right-click menu
+    #[serde(default = "default_true")]
+    pub context_menu_enabled: bool,
+    /// Whether the user has answered the one-time context menu prompt.
+    /// Defaults to false so users updating from older versions get asked too.
+    #[serde(default)]
+    pub context_menu_prompted: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_sort_root() -> PathBuf {
@@ -78,6 +89,8 @@ impl Default for AppSettings {
             default_sort_root: default_sort_root(),
             update_mode: default_update_mode(),
             dashboard_group_by: default_dashboard_group_by(),
+            context_menu_enabled: true,
+            context_menu_prompted: false,
         }
     }
 }

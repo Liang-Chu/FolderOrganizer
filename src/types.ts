@@ -19,6 +19,10 @@ export interface AppSettings {
   update_mode: 'off' | 'notify' | 'auto';
   /** Dashboard scheduled actions grouping: 'none' | 'date' | 'rule' | 'folder' */
   dashboard_group_by: 'none' | 'date' | 'rule' | 'folder';
+  /** Show "Watch with Folder Organizer" in the Explorer right-click menu */
+  context_menu_enabled: boolean;
+  /** Whether the user has answered the one-time context menu prompt */
+  context_menu_prompted: boolean;
 }
 
 export interface WatchedFolder {

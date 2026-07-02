@@ -238,6 +238,8 @@
     "startWithOsDesc": "Launch automatically when you log in",
     "minimizeToTray": "Minimize to Tray",
     "minimizeToTrayDesc": "Keep running in system tray when window is closed",
+    "contextMenu": "Windows Right-Click Menu",
+    "contextMenuDesc": "Show \"Watch with Folder Organizer\" when right-clicking a folder in Explorer (on Windows 11 it's under \"Show more options\")",
     "defaultSortRoot": "Default Sort Root",
     "defaultSortRootDesc": "Root folder for Move destinations — subfolder names resolve under this path",
     "selectSortRoot": "Select default sort root",
@@ -278,6 +280,13 @@
     "langEn": "English",
     "langZh": "中文",
     "langFr": "Français"
+  },
+  "contextMenuPrompt": {
+    "title": "Add to the right-click menu?",
+    "body": "Adds \"Watch with Folder Organizer\" to the Explorer right-click menu for folders, so you can start watching any folder in one click. On Windows 11 it appears under \"Show more options\".",
+    "hint": "You can change this anytime in Settings.",
+    "enable": "Enable",
+    "notNow": "Not now"
   },
   "common": {
     "success": "success",
