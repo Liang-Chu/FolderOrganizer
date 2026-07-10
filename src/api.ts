@@ -117,10 +117,6 @@ export const getScheduledDeletions = () =>
 export const cancelScheduledDeletion = (deletionId: string) =>
   invoke<void>("cancel_scheduled_deletion", { deletionId });
 
-/** Manually run all due deletions now. Returns count of files deleted. */
-export const runDeletions = () =>
-  invoke<number>("run_deletions");
-
 /** Immediately delete selected scheduled deletions by ID. Returns count deleted. */
 export const deleteScheduledNow = (deletionIds: string[]) =>
   invoke<number>("delete_scheduled_now", { deletionIds });

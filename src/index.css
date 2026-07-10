@@ -1,7 +1,17 @@
 @import "tailwindcss";
 
+html {
+  /* Render native widget parts (select dropdowns, number spinners, etc.) dark */
+  color-scheme: dark;
+}
+
 html, body, #root {
   min-width: 1080px;
+}
+
+select option {
+  background-color: #27272a;
+  color: #e4e4e7;
 }
 
 /* Dark scrollbar for all scrollable containers */

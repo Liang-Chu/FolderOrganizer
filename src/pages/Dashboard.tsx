@@ -208,13 +208,6 @@ export default function Dashboard() {
     }
   };
 
-  const handleRunDeletions = async () => {
-    const count = await api.runDeletions();
-    setDeletionResult(t("dashboard.deletionsRan", { count }));
-    setTimeout(() => setDeletionResult(null), 3000);
-    loadData();
-  };
-
   const handleDeleteSelectedNow = async () => {
     if (selectedDeletionIds.length === 0) return;
     const ok = await confirm(
@@ -433,14 +426,6 @@ export default function Dashboard() {
                     <option value="folder">{t("dashboard.groupByFolder")}</option>
                   </select>
                 </div>
-                <button
-                  onClick={handleRunDeletions}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-700 hover:bg-amber-600 rounded-lg text-xs font-medium transition-colors"
-                  title={t("dashboard.runDeletionsHint")}
-                >
-                  <Play size={14} />
-                  {t("dashboard.runDeletionsNow")}
-                </button>
                 <button
                   onClick={handleDeleteSelectedNow}
                   disabled={selectedDeletionIds.length === 0 || deletingSelected}
